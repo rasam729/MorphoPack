@@ -1,0 +1,67 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "generated": "2026-06-04T00:00:00Z",
+    "description": "Pre-baked mock data for Morpho-Pack hackathon demo judges",
+    "note": "All 3D asset URLs point to publicly accessible Azure Blob Storage CDN endpoints"
+  },
+  "assets": [
+    {
+      "id": "asset_001",
+      "name": "Bluetooth Speaker — Compact",
+      "format": "GLB",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Avocado/glTF-Binary/Avocado.glb",
+      "thumbnail_url": "https://morphopackcdn.azureedge.net/thumbs/speaker.webp",
+      "dimensions_mm": { "x": 82, "y": 82, "z": 95 },
+      "volume_cm3": 248.6
+    },
+    {
+      "id": "asset_002",
+      "name": "Smart Watch — Series X",
+      "format": "GLB",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb",
+      "thumbnail_url": "https://morphopackcdn.azureedge.net/thumbs/watch.webp",
+      "dimensions_mm": { "x": 44, "y": 38, "z": 11 },
+      "volume_cm3": 18.4
+    },
+    {
+      "id": "asset_003",
+      "name": "Modular PCB Board — 4-Layer",
+      "format": "STEP",
+      "url": "https://morphopackcdn.azureedge.net/models/pcb_4layer.step",
+      "thumbnail_url": "https://morphopackcdn.azureedge.net/thumbs/pcb.webp",
+      "dimensions_mm": { "x": 100, "y": 80, "z": 4 },
+      "volume_cm3": 32.0
+    }
+  ],
+  "analysis_results": {
+    "mycelium_speaker": {
+      "material": "mycelium",
+      "asset_id": "asset_001",
+      "sustainability_score": 94,
+      "void_fill_eliminated_m3": 0.31,
+      "container_efficiency_pct": 83,
+      "co2_reduction_kg": 2.14,
+      "svg_blueprint_url": "https://morphopackcdn.azureedge.net/blueprints/speaker_mycelium.svg",
+      "glb_preview_url": "https://morphopackcdn.azureedge.net/outputs/speaker_mycelium_pack.glb"
+    },
+    "kraft_pcb": {
+      "material": "kraft",
+      "asset_id": "asset_003",
+      "sustainability_score": 85,
+      "void_fill_eliminated_m3": 0.12,
+      "container_efficiency_pct": 76,
+      "co2_reduction_kg": 0.88,
+      "svg_blueprint_url": "https://morphopackcdn.azureedge.net/blueprints/pcb_kraft.svg",
+      "glb_preview_url": "https://morphopackcdn.azureedge.net/outputs/pcb_kraft_pack.glb"
+    }
+  },
+  "esg_benchmarks": {
+    "baseline_co2_kg_per_unit": 5.2,
+    "industry_avg_void_fill_pct": 42,
+    "industry_avg_efficiency_pct": 58,
+    "morpho_pack_co2_kg_per_unit": 0.8,
+    "morpho_pack_void_fill_pct": 4,
+    "morpho_pack_efficiency_pct": 83
+  }
+}

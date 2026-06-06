@@ -1,0 +1,21 @@
+{
+  "telemetry_stream": [
+    { "timestamp_offset_min": 0,  "ss": 72, "void_m3": 0.18, "efficiency_pct": 61, "co2_kg": 0.92 },
+    { "timestamp_offset_min": 2,  "ss": 78, "void_m3": 0.21, "efficiency_pct": 65, "co2_kg": 0.88 },
+    { "timestamp_offset_min": 4,  "ss": 83, "void_m3": 0.24, "efficiency_pct": 70, "co2_kg": 0.84 },
+    { "timestamp_offset_min": 6,  "ss": 88, "void_m3": 0.27, "efficiency_pct": 74, "co2_kg": 0.82 },
+    { "timestamp_offset_min": 8,  "ss": 91, "void_m3": 0.29, "efficiency_pct": 78, "co2_kg": 0.81 },
+    { "timestamp_offset_min": 10, "ss": 94, "void_m3": 0.31, "efficiency_pct": 83, "co2_kg": 0.80 }
+  ],
+  "fleet_jobs": [
+    { "job_id": "JOB-2847", "material": "mycelium",  "status": "completed", "units": 500, "co2_saved_kg": 2.14 },
+    { "job_id": "JOB-2848", "material": "kraft",     "status": "processing", "units": 250, "co2_saved_kg": null },
+    { "job_id": "JOB-2849", "material": "cardboard", "status": "queued",    "units": 1000, "co2_saved_kg": null }
+  ],
+  "powerbi_embed": {
+    "workspace_id": "MOCK-WORKSPACE-ID",
+    "report_id":    "MOCK-REPORT-ID",
+    "embed_url":    "https://app.powerbi.com/reportEmbed?reportId=MOCK&groupId=MOCK",
+    "note": "Replace with real Power BI embedded token from Azure AD app registration"
+  }
+}
