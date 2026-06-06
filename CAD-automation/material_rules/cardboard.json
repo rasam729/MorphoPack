@@ -1,0 +1,19 @@
+{
+  "material_id": "cardboard",
+  "display_name": "Corrugated Cardboard",
+  "wall_thickness_mm": 4.5,
+  "buffer_clearance_mm": 2.0,
+  "void_fill_factor": 0.55,
+  "max_span_mm": 600,
+  "flute_profile": "B-flute",
+  "score_line_depth_mm": 1.5,
+  "density_kgm3": 80,
+  "tensile_strength_mpa": 3.2,
+  "compressive_strength_mpa": 2.8,
+  "co2_per_kg": 2.4,
+  "degradation_days_50pct": 120,
+  "degradation_days_100pct": 360,
+  "certifications": ["FSC", "PEFC", "ISO 9706"],
+  "color_hex": "#fef9c3",
+  "notes": "Standard B-flute corrugated. Score depth 1.5mm for clean 90-degree folds."
+}

@@ -1,0 +1,19 @@
+{
+  "material_id": "kraft",
+  "display_name": "Recycled Kraft Fibers",
+  "wall_thickness_mm": 3.0,
+  "buffer_clearance_mm": 1.5,
+  "void_fill_factor": 0.63,
+  "max_span_mm": 500,
+  "flute_profile": "E-flute",
+  "score_line_depth_mm": 0.8,
+  "density_kgm3": 65,
+  "tensile_strength_mpa": 2.1,
+  "compressive_strength_mpa": 1.9,
+  "co2_per_kg": 1.6,
+  "degradation_days_50pct": 60,
+  "degradation_days_100pct": 180,
+  "certifications": ["FSC Recycled", "GRS", "Cradle to Cradle Silver"],
+  "color_hex": "#fde68a",
+  "notes": "100% post-consumer recycled kraft. Thinner E-flute for retail-ready packaging."
+}

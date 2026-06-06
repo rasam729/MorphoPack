@@ -1,0 +1,19 @@
+{
+  "material_id": "mycelium",
+  "display_name": "Agricultural Mycelium",
+  "wall_thickness_mm": 8.0,
+  "buffer_clearance_mm": 3.0,
+  "void_fill_factor": 0.72,
+  "max_span_mm": 400,
+  "flute_profile": null,
+  "score_line_depth_mm": 0.0,
+  "density_kgm3": 50,
+  "tensile_strength_mpa": 0.5,
+  "compressive_strength_mpa": 0.3,
+  "co2_per_kg": 0.8,
+  "degradation_days_50pct": 22,
+  "degradation_days_100pct": 45,
+  "certifications": ["TUV HOME COMPOSTABLE", "ASTM D6400", "EN 13432"],
+  "color_hex": "#bbf7d0",
+  "notes": "Grown from agricultural waste mycelium. No adhesives. Fully compostable."
+}
