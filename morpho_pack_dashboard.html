@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Morpho-Pack // PaaS Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Fraunces:opsz,wght@9..144,300;9..144,600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --g50:#f0fdf4;--g100:#dcfce7;--g200:#bbf7d0;--g300:#86efac;
+  --g400:#4ade80;--g500:#22c55e;--g600:#16a34a;--g700:#15803d;--g800:#166534;
+  --s50:#f8fafc;--s100:#f1f5f9;--s200:#e2e8f0;--s300:#cbd5e1;
+  --s400:#94a3b8;--s500:#64748b;--s600:#475569;--s700:#334155;
+  --s800:#1e293b;--s900:#0f172a;
+  --white:#ffffff;
+  --font-head:'Fraunces',Georgia,serif;
+  --font-body:'DM Sans','Segoe UI',system-ui,sans-serif;
+  --font-mono:'DM Mono','Fira Mono',monospace;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 16px rgba(0,0,0,.07),0 2px 4px rgba(0,0,0,.04);
+  --radius:10px;--radius-lg:14px;
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font-body);background:var(--s50);color:var(--s800);font-size:13px;line-height:1.5}
+
+/* ─ LAYOUT ─ */
+.app{display:grid;grid-template-columns:264px 1fr 284px;grid-template-rows:52px 1fr;height:100vh}
+.topbar{grid-column:1/-1;background:var(--white);border-bottom:1px solid var(--s200);display:flex;align-items:center;justify-content:space-between;padding:0 20px;z-index:10}
+.sidebar{background:var(--white);border-right:1px solid var(--s200);overflow-y:auto;display:flex;flex-direction:column;gap:0}
+.viewport{background:var(--s100);display:flex;flex-direction:column;overflow:hidden}
+.analytics{background:var(--white);border-left:1px solid var(--s200);overflow-y:auto}
+
+/* ─ TOPBAR ─ */
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:30px;height:30px;background:var(--g600);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-mark svg{width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.brand-name{font-family:var(--font-head);font-size:15px;font-weight:600;color:var(--s900);letter-spacing:-.3px;line-height:1}
+.brand-name em{color:var(--g600);font-style:normal}
+.brand-sub{font-family:var(--font-mono);font-size:9.5px;color:var(--s400);letter-spacing:.4px;margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.status-pill{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--g700);background:var(--g50);border:1px solid var(--g200);border-radius:20px;padding:4px 11px;font-family:var(--font-mono)}
+.pulse{width:6px;height:6px;border-radius:50%;background:var(--g500);animation:pulseAnim 2s ease-in-out infinite}
+@keyframes pulseAnim{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.75)}}
+.tb-badge{font-family:var(--font-mono);font-size:9.5px;color:var(--s500);background:var(--s100);border:1px solid var(--s200);border-radius:5px;padding:3px 9px}
+
+/* ─ SIDEBAR INTERNALS ─ */
+.sb-section{padding:16px 16px 0}
+.sb-section:last-child{padding-bottom:20px}
+.section-label{font-family:var(--font-mono);font-size:8.5px;letter-spacing:1.4px;color:var(--s400);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.section-label::after{content:'';flex:1;height:1px;background:var(--s200)}
+
+/* Upload zone */
+.upload-zone{border:1.5px dashed var(--g300);border-radius:var(--radius-lg);padding:22px 14px;text-align:center;cursor:pointer;transition:background .18s,border-color .18s}
+.upload-zone:hover{background:var(--g50);border-color:var(--g500)}
+.upload-zone.drag{background:var(--g50);border-color:var(--g500);border-style:solid}
+.upload-icon{width:36px;height:36px;background:var(--g50);border:1px solid var(--g200);border-radius:10px;display:flex;align-items:center;justify-content:center;margin:0 auto 9px;color:var(--g600)}
+.upload-icon svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.upload-t{font-size:12px;font-weight:500;color:var(--s700)}
+.upload-s{font-size:10px;color:var(--s400);font-family:var(--font-mono)}
+.fmt-row{display:flex;gap:4px;justify-content:center;margin-top:8px;flex-wrap:wrap}
+.fmt-tag{font-family:var(--font-mono);font-size:8.5px;color:var(--g700);background:var(--g100);border:1px solid var(--g200);border-radius:3px;padding:2px 6px}
+.prog-wrap{display:none;margin-top:12px}
+.prog-wrap.show{display:block}
+.prog-bar{height:3px;background:var(--s200);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;background:var(--g500);border-radius:2px;width:0%;transition:width .35s}
+.prog-meta{display:flex;justify-content:space-between;margin-top:4px;font-family:var(--font-mono);font-size:8.5px;color:var(--s400)}
+
+/* Material select */
+.sel-wrap{position:relative}
+.sel-wrap select{width:100%;padding:9px 30px 9px 11px;border:1px solid var(--s200);border-radius:var(--radius);background:var(--white);color:var(--s800);font-family:var(--font-body);font-size:12.5px;appearance:none;cursor:pointer}
+.sel-wrap select:focus{outline:none;border-color:var(--g400);box-shadow:0 0 0 3px var(--g100)}
+.sel-wrap::after{content:'▾';position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--s400);pointer-events:none}
+.mat-badge{display:flex;align-items:flex-start;gap:7px;margin-top:8px;padding:8px 10px;background:var(--g50);border:1px solid var(--g100);border-radius:8px}
+.mat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.mat-label{font-size:11px;font-weight:500;color:var(--s800)}
+.mat-desc{font-size:9.5px;color:var(--s500);margin-top:1px}
+
+/* Degradation slider */
+.slider-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+.slider-title{font-size:11.5px;font-weight:500;color:var(--s700)}
+.slider-val{font-family:var(--font-mono);font-size:12px;color:var(--g700);font-weight:500}
+.sl{width:100%;appearance:none;height:4px;border-radius:2px;outline:none;cursor:pointer}
+.sl::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border-radius:50%;background:var(--g600);border:2px solid #fff;box-shadow:0 1px 4px rgba(22,163,74,.4);cursor:grab}
+.sl::-webkit-slider-thumb:active{cursor:grabbing}
+.ticks{display:flex;justify-content:space-between;margin-top:5px}
+.ticks span{font-family:var(--font-mono);font-size:8.5px;color:var(--s400)}
+.deg-bar{height:5px;background:var(--s200);border-radius:3px;overflow:hidden;margin-top:10px}
+.deg-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--g500),#84cc16,#eab308,#f97316);transition:width .3s}
+.deg-lbs{display:flex;justify-content:space-between;margin-top:3px}
+.deg-lbs span{font-family:var(--font-mono);font-size:8px}
+
+/* Pipeline status */
+.pipeline-box{margin:14px 16px 0;background:var(--s50);border:1px solid var(--s200);border-radius:var(--radius);padding:12px}
+.pipeline-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.pipeline-row:last-child{margin-bottom:0}
+.pipe-ic{width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.pipe-txt{flex:1;font-size:10.5px;color:var(--s600)}
+.pipe-state{font-family:var(--font-mono);font-size:8.5px;padding:2px 6px;border-radius:3px}
+.st-done{background:var(--g100);color:var(--g800)}.st-run{background:#fef9c3;color:#854d0e;animation:blink 1.5s ease-in-out infinite}
+.st-wait{background:var(--s100);color:var(--s500)}.st-err{background:#fee2e2;color:#991b1b}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.55}}
+
+/* ─ VIEWPORT ─ */
+.vp-header{background:var(--white);border-bottom:1px solid var(--s200);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.vp-tabs{display:flex;gap:2px}
+.vp-tab{font-size:10.5px;font-family:var(--font-mono);padding:5px 11px;border-radius:6px;border:none;background:transparent;color:var(--s500);cursor:pointer;transition:all .14s}
+.vp-tab.active{background:var(--g50);color:var(--g700);border:1px solid var(--g200)}
+.vp-actions{display:flex;gap:6px}
+.act-btn{font-size:10.5px;font-family:var(--font-mono);padding:5px 10px;border-radius:6px;border:1px solid var(--s200);background:var(--white);color:var(--s600);cursor:pointer;display:flex;align-items:center;gap:4px;transition:all .14s}
+.act-btn:hover{background:var(--s50);border-color:var(--s300)}
+.act-btn.primary{background:var(--g600);color:#fff;border-color:var(--g600)}
+.act-btn.primary:hover{background:var(--g700)}
+.act-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+
+.mesh-viewer{flex:1.15;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--s200)}
+canvas#mc{position:absolute;inset:0;width:100%;height:100%}
+.mesh-badge{position:absolute;top:11px;right:11px;font-family:var(--font-mono);font-size:8.5px;color:var(--g700);background:var(--g50);border:1px solid var(--g200);border-radius:4px;padding:3px 8px}
+.mesh-badge.proc{color:#92400e;background:#fffbeb;border-color:#fde68a;animation:blink 1.5s ease-in-out infinite}
+.mesh-label{position:absolute;bottom:11px;left:11px;font-family:var(--font-mono);font-size:8.5px;color:var(--s400);background:var(--white);border:1px solid var(--s200);border-radius:4px;padding:3px 8px}
+.mesh-ctrls{position:absolute;bottom:11px;right:11px;display:flex;gap:4px}
+.mc-btn{width:26px;height:26px;border:1px solid var(--s200);background:var(--white);border-radius:5px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:var(--s600);transition:all .14s}
+.mc-btn:hover{background:var(--s50);border-color:var(--s300)}
+
+.dieline-panel{flex:1;display:flex;flex-direction:column;background:var(--white);overflow:hidden}
+.dl-header{padding:9px 15px;border-bottom:1px solid var(--s100);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.dl-title{font-family:var(--font-mono);font-size:9.5px;color:var(--s500);display:flex;align-items:center;gap:5px}
+.dl-title svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.dl-legend{display:flex;gap:11px}
+.leg-item{display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:8.5px;color:var(--s500)}
+.leg-cut{width:18px;height:1.5px;background:var(--g800);border-radius:1px}
+.leg-fold{width:18px;height:1.5px;background:var(--g400);border-top:1.5px dashed var(--g400)}
+.dl-body{flex:1;display:flex;align-items:center;justify-content:center;padding:14px;overflow:hidden}
+
+/* ─ ANALYTICS ─ */
+.an-section{padding:15px 15px 0}
+.an-title{font-size:12.5px;font-weight:500;color:var(--s800);line-height:1.35}
+.an-sub{font-family:var(--font-mono);font-size:9px;color:var(--s400);margin-top:2px}
+
+/* Gauge card */
+.gauge-card{margin:12px 15px 0;padding:15px;background:var(--white);border:1px solid var(--s200);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm)}
+.gauge-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.gauge-lbl{font-size:11px;font-weight:500;color:var(--s700)}
+.gauge-sub{font-family:var(--font-mono);font-size:8.5px;color:var(--s400);margin-top:2px}
+.gauge-score{font-family:var(--font-head);font-size:28px;font-weight:600;color:var(--g700);line-height:1}
+.gauge-score span{font-family:var(--font-body);font-size:13px;font-weight:400;color:var(--s400)}
+.ring-wrap{display:flex;justify-content:center;margin-bottom:12px}
+.ring-track{fill:none;stroke:var(--s200);stroke-width:8}
+.ring-arc{fill:none;stroke:var(--g500);stroke-width:8;stroke-linecap:round;stroke-dasharray:220;stroke-dashoffset:220;transition:stroke-dashoffset 1.5s cubic-bezier(.16,1,.3,1);transform:rotate(-90deg);transform-origin:50% 50%}
+.g-bars{display:flex;flex-direction:column;gap:7px}
+.g-bar-row{display:flex;align-items:center;gap:8px}
+.g-bar-lbl{font-size:9.5px;color:var(--s500);width:72px;flex-shrink:0}
+.g-bar-track{flex:1;height:4px;background:var(--s200);border-radius:2px;overflow:hidden}
+.g-bar-fill{height:100%;border-radius:2px;width:0%;transition:width 1.2s cubic-bezier(.16,1,.3,1)}
+.g-bar-val{font-family:var(--font-mono);font-size:8.5px;color:var(--g700);width:26px;text-align:right}
+
+/* Metric cards */
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:11px 15px 0}
+.mc{background:var(--white);border:1px solid var(--s200);border-left:3px solid var(--g400);border-radius:var(--radius);padding:11px 11px 9px;box-shadow:var(--shadow-sm);cursor:default;transition:box-shadow .14s}
+.mc:hover{box-shadow:var(--shadow-md)}
+.mc-lbl{font-size:9px;color:var(--s500);margin-bottom:5px;line-height:1.35}
+.mc-val{font-family:var(--font-head);font-size:19px;font-weight:600;color:var(--s900);line-height:1}
+.mc-unit{font-family:var(--font-mono);font-size:8.5px;color:var(--s400);margin-top:3px}
+.mc-trend{font-family:var(--font-mono);font-size:8.5px;color:var(--g700);margin-top:4px}
+
+/* Power BI card */
+.pbi-card{margin:11px 15px 0;border:1px solid var(--s200);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
+.pbi-hd{padding:9px 13px;background:var(--s50);border-bottom:1px solid var(--s200);display:flex;align-items:center;justify-content:space-between}
+.pbi-ttl{font-size:10px;font-weight:500;color:var(--s700);display:flex;align-items:center;gap:5px}
+.pbi-ttl svg{width:11px;height:11px;stroke:#1d4ed8;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pbi-badge{font-family:var(--font-mono);font-size:8px;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;padding:2px 6px;border-radius:3px}
+.pbi-body{padding:13px;background:var(--white)}
+.mini-chart{display:flex;align-items:flex-end;gap:3px;height:52px;margin-bottom:9px}
+.bar{border-radius:3px 3px 0 0;background:var(--g300);transition:height .8s cubic-bezier(.16,1,.3,1),background .2s;cursor:pointer;flex:1;min-width:14px}
+.bar:hover,.bar.hl{background:var(--g600)}
+.chart-lbs{display:flex;justify-content:space-between}
+.chart-lbs span{font-family:var(--font-mono);font-size:7.5px;color:var(--s400);flex:1;text-align:center}
+.pbi-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:11px;border-top:1px solid var(--s100);padding-top:11px}
+.pbi-stat{text-align:center}
+.pbi-sv{font-family:var(--font-head);font-size:14px;font-weight:600;color:var(--g700)}
+.pbi-sl{font-family:var(--font-mono);font-size:7.5px;color:var(--s400);margin-top:1px}
+
+/* SDG tags */
+.sdg-row{margin:10px 15px 16px;display:flex;flex-wrap:wrap;gap:4px}
+.sdg-tag{font-family:var(--font-mono);font-size:7.5px;border-radius:4px;padding:3px 6px;white-space:nowrap}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--s200);border-radius:2px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ─ TOPBAR ─ -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    </div>
+    <div>
+      <div class="brand-name">Morpho<em>-Pack</em> <span style="font-family:var(--font-mono);font-size:10px;color:var(--s400);font-weight:300">// PaaS</span></div>
+      <div class="brand-sub">Generative Geometric Sustainability</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill"><div class="pulse"></div>Pipeline Active</div>
+    <div class="tb-badge">GitHub DevDays Hackathon</div>
+    <div class="tb-badge">v0.9.1-beta</div>
+  </div>
+</div>
+
+<!-- ─ SIDEBAR ─ -->
+<div class="sidebar">
+  <div class="sb-section" style="margin-top:15px">
+    <div class="section-label">3D Mesh Input</div>
+    <div class="upload-zone" id="uploadZone"
+      onclick="simulateUpload()"
+      ondragover="event.preventDefault();this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="handleDrop(event)">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="upload-t">Drop mesh file here</div>
+      <div class="upload-s">or click to browse</div>
+      <div class="fmt-row">
+        <span class="fmt-tag">.STEP</span>
+        <span class="fmt-tag">.OBJ</span>
+        <span class="fmt-tag">.STL</span>
+        <span class="fmt-tag">.GLB</span>
+      </div>
+      <div class="prog-wrap" id="progWrap">
+        <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+        <div class="prog-meta"><span>bicycle_frame.obj</span><span id="progPct">0%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sb-section" style="margin-top:14px">
+    <div class="section-label">Material Profile</div>
+    <div class="sel-wrap">
+      <select id="matSel" onchange="updateMat()">
+        <option value="mycelium">Agricultural Mycelium</option>
+        <option value="cardboard">Corrugated Cardboard</option>
+        <option value="kraft">Recycled Kraft Fibers</option>
+      </select>
+    </div>
+    <div class="mat-badge">
+      <div class="mat-dot" id="matDot" style="background:var(--g500)"></div>
+      <div>
+        <div class="mat-label" id="matLabel">Agricultural Mycelium</div>
+        <div class="mat-desc" id="matDesc">Circularity: 0.97 · 30-day soil degradation</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sb-section" style="margin-top:14px">
+    <div class="section-label">Degradation Timeline</div>
+    <div class="slider-header">
+      <span class="slider-title">Material Degradation Timeline</span>
+      <span class="slider-val" id="slVal">6 mo</span>
+    </div>
+    <input type="range" class="sl" id="degSl" min="0" max="24" value="6" step="1" oninput="updateSl(this.value)"
+      style="background:linear-gradient(to right,var(--g500) 0%,var(--g500) 25%,var(--s200) 25%,var(--s200) 100%)">
+    <div class="ticks"><span>0</span><span>6</span><span>12</span><span>18</span><span>24 mo</span></div>
+    <div class="deg-bar"><div class="deg-fill" id="degFill" style="width:25%"></div></div>
+    <div class="deg-lbs">
+      <span style="color:var(--g600)">Fresh</span>
+      <span style="color:#eab308">Breaking</span>
+      <span style="color:#f97316">Composting</span>
+    </div>
+  </div>
+
+  <div class="pipeline-box">
+    <div class="section-label" style="margin-bottom:10px">Pipeline Status</div>
+    <div class="pipeline-row">
+      <div class="pipe-ic" style="background:var(--g100)">✓</div>
+      <span class="pipe-txt">Mesh import &amp; validation</span>
+      <span class="pipe-state st-done">done</span>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipe-ic" style="background:#fef9c3">◐</div>
+      <span class="pipe-txt">Convex hull generation</span>
+      <span class="pipe-state st-run" id="s1">running</span>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipe-ic" style="background:var(--s100)">○</div>
+      <span class="pipe-txt">GPT-4o seam advisor</span>
+      <span class="pipe-state st-wait" id="s2">queued</span>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipe-ic" style="background:var(--s100)">○</div>
+      <span class="pipe-txt">SVG dieline export</span>
+      <span class="pipe-state st-wait" id="s3">queued</span>
+    </div>
+  </div>
+
+  <div class="sb-section" style="margin-top:14px">
+    <div style="padding:11px;background:var(--g50);border:1px solid var(--g100);border-radius:var(--radius)">
+      <div style="font-size:10px;font-weight:500;color:var(--g800);margin-bottom:6px">Active Job</div>
+      <div style="font-family:var(--font-mono);font-size:8.5px;color:var(--s500);line-height:1.9">
+        <div>ID: <span style="color:var(--g700)">job_3f8a1c2d</span></div>
+        <div>File: <span style="color:var(--s700)">bicycle_frame.obj</span></div>
+        <div>User: <span style="color:var(--s700)">demo-user-001</span></div>
+        <div>Blender: <span style="color:var(--s700)">/usr/bin/blender</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─ VIEWPORT ─ -->
+<div class="viewport">
+  <div class="vp-header">
+    <div class="vp-tabs">
+      <button class="vp-tab active">3D Mesh</button>
+      <button class="vp-tab">Dieline</button>
+      <button class="vp-tab">Wireframe</button>
+    </div>
+    <div class="vp-actions">
+      <button class="act-btn">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export SVG
+      </button>
+      <button class="act-btn primary" onclick="runPipeline()">
+        <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Run Pipeline
+      </button>
+    </div>
+  </div>
+
+  <div class="mesh-viewer">
+    <canvas id="mc"></canvas>
+    <div class="mesh-badge proc" id="meshBadge">● PROCESSING</div>
+    <div class="mesh-label">bicycle_frame.obj · 12,847 verts · Blender 3.6</div>
+    <div class="mesh-ctrls">
+      <div class="mc-btn">+</div>
+      <div class="mc-btn">⊙</div>
+      <div class="mc-btn">−</div>
+    </div>
+  </div>
+
+  <div class="dieline-panel">
+    <div class="dl-header">
+      <div class="dl-title">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+        2D Manufacturing Canvas (.svg)
+      </div>
+      <div class="dl-legend">
+        <div class="leg-item"><div class="leg-cut"></div>Cut line</div>
+        <div class="leg-item"><div class="leg-fold"></div>Score/fold</div>
+      </div>
+    </div>
+    <div class="dl-body">
+      <svg id="dlSVG" width="100%" viewBox="0 0 500 175" style="max-width:500px;max-height:175px"></svg>
+    </div>
+  </div>
+</div>
+
+<!-- ─ ANALYTICS ─ -->
+<div class="analytics">
+  <div class="an-section" style="margin-top:15px">
+    <div class="an-title">Fleet Telemetry &amp;<br>Carbon Ripple Tracking</div>
+    <div class="an-sub">Azure Cosmos DB · Power BI · Live sync</div>
+  </div>
+
+  <div class="gauge-card">
+    <div class="gauge-top">
+      <div>
+        <div class="gauge-lbl">Integrated Sustainability Score</div>
+        <div class="gauge-sub">Sₛ = α·Vol + β·Circ + γ·CO₂</div>
+      </div>
+      <div class="gauge-score" id="gScore">73<span>/100</span></div>
+    </div>
+    <div class="ring-wrap">
+      <svg width="96" height="96" viewBox="0 0 96 96">
+        <circle class="ring-track" cx="48" cy="48" r="34"/>
+        <circle class="ring-arc" id="ringArc" cx="48" cy="48" r="34"/>
+        <text x="48" y="44" text-anchor="middle" dominant-baseline="central"
+          font-family="Fraunces,serif" font-size="17" font-weight="600" fill="#1e293b" id="ringTxt">73</text>
+        <text x="48" y="60" text-anchor="middle"
+          font-family="DM Mono,monospace" font-size="7.5" fill="#94a3b8">out of 100</text>
+      </svg>
+    </div>
+    <div class="g-bars">
+      <div class="g-bar-row">
+        <span class="g-bar-lbl">Volumetric</span>
+        <div class="g-bar-track"><div class="g-bar-fill" id="b1" style="background:var(--g500)"></div></div>
+        <span class="g-bar-val" id="bv1">82%</span>
+      </div>
+      <div class="g-bar-row">
+        <span class="g-bar-lbl">Circularity</span>
+        <div class="g-bar-track"><div class="g-bar-fill" id="b2" style="background:#22d3ee"></div></div>
+        <span class="g-bar-val" id="bv2">97%</span>
+      </div>
+      <div class="g-bar-row">
+        <span class="g-bar-lbl">CO₂ Index</span>
+        <div class="g-bar-track"><div class="g-bar-fill" id="b3" style="background:#a78bfa"></div></div>
+        <span class="g-bar-val" id="bv3">56%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="metric-grid">
+    <div class="mc">
+      <div class="mc-lbl">Void Fill Volume Eliminated</div>
+      <div class="mc-val" id="mv1">0.49</div>
+      <div class="mc-unit">cubic metres · per unit</div>
+      <div class="mc-trend">↑ 23% vs standard box</div>
+    </div>
+    <div class="mc" style="border-left-color:var(--g300)">
+      <div class="mc-lbl">Container Efficiency Boost</div>
+      <div class="mc-val" id="mv2" style="color:var(--g700)">+38%</div>
+      <div class="mc-unit">fleet-wide improvement</div>
+      <div class="mc-trend">↑ cube utilisation</div>
+    </div>
+    <div class="mc" style="border-left-color:#22d3ee">
+      <div class="mc-lbl">CO₂ Saved per Shipment</div>
+      <div class="mc-val" id="mv3">0.28</div>
+      <div class="mc-unit">kg CO₂ per dispatch</div>
+      <div class="mc-trend">↑ Li &amp; Wang 2026</div>
+    </div>
+    <div class="mc" style="border-left-color:#a78bfa">
+      <div class="mc-lbl">Carbon Ripple · Annual</div>
+      <div class="mc-val" id="mv4">1.7</div>
+      <div class="mc-unit">tonnes CO₂ · 500/mo fleet</div>
+      <div class="mc-trend">↑ SDG 12 + 13 aligned</div>
+    </div>
+  </div>
+
+  <div class="pbi-card">
+    <div class="pbi-hd">
+      <div class="pbi-ttl">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Microsoft Power BI — Carbon Ripple
+      </div>
+      <span class="pbi-badge">EMBED SLOT</span>
+    </div>
+    <div class="pbi-body">
+      <div class="mini-chart" id="miniChart"></div>
+      <div class="chart-lbs" id="chartLbs"></div>
+      <div class="pbi-stats">
+        <div class="pbi-stat"><div class="pbi-sv">6,200</div><div class="pbi-sl">Fleet shipments</div></div>
+        <div class="pbi-stat"><div class="pbi-sv">2.1t</div><div class="pbi-sl">CO₂ avoided</div></div>
+        <div class="pbi-stat"><div class="pbi-sv">A+</div><div class="pbi-sl">ESG grade</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sdg-row">
+    <span class="sdg-tag" style="color:var(--g800);background:var(--g50);border:1px solid var(--g200)">SDG 12 · Responsible Consumption</span>
+    <span class="sdg-tag" style="color:var(--g800);background:var(--g50);border:1px solid var(--g200)">SDG 13 · Climate Action</span>
+    <span class="sdg-tag" style="color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe">SDG 9 · Innovation</span>
+  </div>
+</div>
+</div>
+
+<script>
+/* ── MATERIAL DATA ── */
+const MATS = {
+  mycelium: {lbl:'Agricultural Mycelium',dot:'#22c55e',desc:'Circularity: 0.97 · 30-day soil degradation',
+    ss:73,v:82,c:97,co:56,void:0.49,eff:38,co2:0.28,ann:1.7},
+  cardboard:{lbl:'Corrugated Cardboard',dot:'#f59e0b',desc:'Circularity: 0.74 · Mechanical recycling pathway',
+    ss:58,v:65,c:74,co:42,void:0.41,eff:29,co2:0.19,ann:1.1},
+  kraft:    {lbl:'Recycled Kraft Fibers',dot:'#78716c',desc:'Circularity: 0.80 · Mixed EoL — compost + paper recycle',
+    ss:65,v:74,c:80,co:48,void:0.44,eff:33,co2:0.23,ann:1.4}
+};
+
+function updateMat() {
+  const m = MATS[document.getElementById('matSel').value];
+  document.getElementById('matDot').style.background = m.dot;
+  document.getElementById('matLabel').textContent = m.lbl;
+  document.getElementById('matDesc').textContent = m.desc;
+  setScore(m.ss);
+  setBar('b1',m.v,'bv1',m.v+'%');
+  setBar('b2',m.c,'bv2',m.c+'%');
+  setBar('b3',m.co,'bv3',m.co+'%');
+  document.getElementById('mv1').textContent = m.void.toFixed(2);
+  document.getElementById('mv2').textContent = '+'+m.eff+'%';
+  document.getElementById('mv3').textContent = m.co2.toFixed(2);
+  document.getElementById('mv4').textContent = m.ann.toFixed(1);
+}
+
+function setScore(n) {
+  document.getElementById('gScore').innerHTML = n+'<span>/100</span>';
+  document.getElementById('ringTxt').textContent = n;
+  const circ = 214; /* 2πr ≈ 2*3.14159*34 */
+  document.getElementById('ringArc').style.strokeDashoffset = circ - (n/100)*circ;
+}
+
+function setBar(id, pct, vid, label) {
+  const el = document.getElementById(id);
+  el.style.width='0%';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ el.style.width=pct+'%'; }));
+  document.getElementById(vid).textContent = label;
+}
+
+/* ── SLIDER ── */
+function updateSl(v) {
+  document.getElementById('slVal').textContent = v+' mo';
+  const p = (v/24)*100;
+  document.getElementById('degFill').style.width = p+'%';
+  document.getElementById('degSl').style.background =
+    'linear-gradient(to right,var(--g500) 0%,var(--g500) '+p+'%,var(--s200) '+p+'%,var(--s200) 100%)';
+}
+
+/* ── UPLOAD ── */
+let uploading=false;
+function handleDrop(e){e.preventDefault();document.getElementById('uploadZone').classList.remove('drag');simulateUpload();}
+function simulateUpload(){
+  if(uploading)return; uploading=true;
+  const pw=document.getElementById('progWrap'),pf=document.getElementById('progFill'),pp=document.getElementById('progPct');
+  pw.classList.add('show');
+  let p=0;
+  const iv=setInterval(()=>{
+    p=Math.min(p+Math.random()*11+4,100);
+    pf.style.width=Math.round(p)+'%'; pp.textContent=Math.round(p)+'%';
+    if(p>=100){
+      clearInterval(iv);
+      setTimeout(()=>{
+        pw.classList.remove('show'); uploading=false; pf.style.width='0%';
+        const b=document.getElementById('meshBadge');
+        b.textContent='● READY'; b.classList.remove('proc');
+        b.style.cssText='color:var(--g700);background:var(--g50);border:1px solid var(--g200)';
+      },500);
+    }
+  },75);
+}
+
+/* ── PIPELINE ── */
+let pRunning=false;
+function runPipeline(){
+  if(pRunning)return; pRunning=true;
+  const steps=['s1','s2','s3'];
+  let i=0;
+  function tick(){
+    if(i>0){const prev=document.getElementById(steps[i-1]);prev.textContent='done';prev.className='pipe-state st-done';}
+    if(i<steps.length){
+      const el=document.getElementById(steps[i]);el.textContent='running';el.className='pipe-state st-run';
+      i++; setTimeout(tick,1100);
+    }else{
+      pRunning=false;
+      const b=document.getElementById('meshBadge');
+      b.textContent='✓ COMPLETE'; b.classList.remove('proc');
+      b.style.cssText='color:var(--g700);background:var(--g50);border:1px solid var(--g200)';
+    }
+  }
+  tick();
+}
+
+/* ── WIREFRAME CANVAS ── */
+function initCanvas(){
+  const canvas=document.getElementById('mc');
+  const par=canvas.parentElement;
+  const resize=()=>{
+    const r=par.getBoundingClientRect();
+    canvas.width=r.width*devicePixelRatio; canvas.height=r.height*devicePixelRatio;
+  };
+  resize(); window.addEventListener('resize',resize);
+  const ctx=canvas.getContext('2d');
+  const verts=[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+  const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  const inner=[[0,6],[1,7],[2,4],[3,5]];
+  let angle=0;
+  function project(x,y,z,a){
+    const ca=Math.cos(a),sa=Math.sin(a),cb=Math.cos(a*.4),sb=Math.sin(a*.4);
+    const x2=x*ca-z*sa,z2=x*sa+z*ca,y2=y*cb-z2*sb,z3=y*sb+z2*cb;
+    const r=par.getBoundingClientRect(),W=r.width,H=r.height,fov=3.2;
+    return{px:W/2+x2/(z3+fov)*Math.min(W,H)*.35,py:H/2+y2/(z3+fov)*Math.min(W,H)*.35,d:z3};
+  }
+  function draw(){
+    const r=par.getBoundingClientRect(),W=r.width,H=r.height;
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    ctx.clearRect(0,0,W,H); angle+=.006;
+    const pts=verts.map(([x,y,z])=>project(x,y,z,angle));
+    ctx.lineWidth=.5; ctx.strokeStyle='rgba(22,163,74,.12)';
+    inner.forEach(([a,b])=>{ctx.beginPath();ctx.moveTo(pts[a].px,pts[a].py);ctx.lineTo(pts[b].px,pts[b].py);ctx.stroke();});
+    edges.forEach(([a,b])=>{
+      const d=(pts[a].d+pts[b].d)/2,al=Math.min(.9,.3+.45*(d+2)/4);
+      ctx.lineWidth=al>.6?1.4:.9; ctx.strokeStyle=`rgba(22,163,74,${al})`;
+      ctx.beginPath();ctx.moveTo(pts[a].px,pts[a].py);ctx.lineTo(pts[b].px,pts[b].py);ctx.stroke();
+    });
+    pts.forEach(p=>{ctx.beginPath();ctx.arc(p.px,p.py,1.8,0,Math.PI*2);ctx.fillStyle='rgba(22,163,74,.65)';ctx.fill();});
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+/* ── DIELINE SVG ── */
+function initDieline(){
+  const cut='#166534',fold='#4ade80';
+  const panels=[
+    {x:18,y:35,w:75,h:105,lbl:'left panel'},
+    {x:98,y:35,w:105,h:105,lbl:'front face'},
+    {x:208,y:35,w:105,h:105,lbl:'top panel'},
+    {x:318,y:35,w:105,h:105,lbl:'back face'},
+    {x:428,y:35,w:55,h:105,lbl:'right flap'}
+  ];
+  const top={x:98,y:8,w:105,h:25,lbl:'top flap'};
+  const bot={x:98,y:142,w:105,h:25,lbl:'bottom flap'};
+  let s='<defs><marker id="da" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="'+cut+'" stroke-width="1.5"/></marker></defs>';
+
+  [...panels,top,bot].forEach(p=>{
+    s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" fill="rgba(22,163,74,0.035)" stroke="${cut}" stroke-width="1.3" rx="1"/>`;
+    s+=`<text x="${p.x+p.w/2}" y="${p.y+p.h/2}" text-anchor="middle" dominant-baseline="central" font-family="DM Mono,monospace" font-size="8" fill="${cut}" opacity="0.45">${p.lbl}</text>`;
+  });
+  [[98,8,98,168],[208,35,208,140],[318,35,318,140],[428,35,428,140],[98,35,203,35],[98,140,203,140]].forEach(([x1,y1,x2,y2])=>{
+    s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${fold}" stroke-width="1.1" stroke-dasharray="4.5 2.5"/>`;
+  });
+  [[98,170,203,170,'105mm'],[18,150,93,150,'75mm']].forEach(([x1,y1,x2,y2,l])=>{
+    s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${cut}" stroke-width=".5" opacity=".35"/>`;
+    s+=`<text x="${(x1+x2)/2}" y="${y1-3}" text-anchor="middle" font-family="DM Mono,monospace" font-size="7" fill="${cut}" opacity=".4">${l}</text>`;
+  });
+  document.getElementById('dlSVG').innerHTML=s;
+}
+
+/* ── MINI CHART ── */
+function initChart(){
+  const months=['J','F','M','A','M','J','J','A','S','O','N','D'];
+  const vals=[28,35,41,38,52,67,61,73,78,70,82,88];
+  const max=Math.max(...vals);
+  const c=document.getElementById('miniChart'),l=document.getElementById('chartLbs');
+  vals.forEach((v,i)=>{
+    const b=document.createElement('div'); b.className='bar'+(i===11?' hl':'');
+    b.style.height='0'; b.style.transition=`height .8s cubic-bezier(.16,1,.3,1) ${i*.05}s`;
+    c.appendChild(b);
+    const lb=document.createElement('span'); lb.textContent=months[i]; l.appendChild(lb);
+    setTimeout(()=>{ b.style.height=((v/max)*48)+'px'; },250);
+  });
+}
+
+/* ── TABS ── */
+document.querySelectorAll('.vp-tab').forEach(t=>{
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.vp-tab').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+/* ── BOOT ── */
+window.addEventListener('load',()=>{
+  initCanvas(); initDieline(); initChart();
+  setTimeout(()=>{
+    setScore(73); setBar('b1',82,'bv1','82%'); setBar('b2',97,'bv2','97%'); setBar('b3',56,'bv3','56%');
+  },350);
+});
+</script>
+</body>
+</html>
