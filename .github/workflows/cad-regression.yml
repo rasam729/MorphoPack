@@ -1,0 +1,39 @@
+name: 🤖 CAD Automation — Fusion 360 Regression Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'CAD-automation/**'
+  pull_request:
+    paths:
+      - 'CAD-automation/**'
+  schedule:
+    - cron: '0 2 * * 1'   # Weekly Monday 2 AM UTC
+
+jobs:
+  lint-and-validate:
+    name: Lint Python CAD Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dev tools
+        run: pip install flake8 black mypy
+
+      - name: 🔍 Lint with flake8
+        working-directory: CAD-automation
+        run: flake8 . --max-line-length=120 --ignore=E203,W503
+
+      - name: 🖤 Check formatting with black
+        working-directory: CAD-automation
+        run: black --check --diff .
+
+      - name: ✅ Validate material rules JSON
+        working-directory: CAD-automation
+        run: python -c "import json; [json.load(open(f)) for f in __import__('glob').glob('material_rules/*.json')]; print('All material rules valid ✅')"
