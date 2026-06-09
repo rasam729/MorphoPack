@@ -725,6 +725,10 @@ function Dashboard({ user, onLogout }) {
   const dielineRef = useRef(null);
   const svgWrapperRef = useRef(null);
   const mat = MATS[matKey];
+  const pieParts = (chartData && chartData.pie) ? chartData.pie : [];
+  const pieGradient = (pieParts.length >= 3)
+    ? `conic-gradient(var(--g500) ${pieParts[0]}% , #22d3ee ${pieParts[0]}% ${pieParts[0] + pieParts[1]}% , #a78bfa ${pieParts[0] + pieParts[1]}% 100%)`
+    : '#f1f5f9';
 
   const toggleFullScreen = () => {
     if (!document.fullscreenElement) dielineRef.current?.requestFullscreen().catch(console.error);
@@ -1470,7 +1474,7 @@ function Dashboard({ user, onLogout }) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', margin: '12px 15px' }}>
               <div className="mc" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                <div style={{ width: '72px', height: '72px', borderRadius: '999px', background: `conic-gradient(${chartData.pie && chartData.pie.length ? `var(--g500) ${chartData.pie[0]}% , #22d3ee ${chartData.pie[0]}% ${chartData.pie[0]+chartData.pie[1]}% , #a78bfa ${chartData.pie[0]+chartData.pie[1]}% 100%` : '#f1f5f9')}` }} />
+                <div style={{ width: '72px', height: '72px', borderRadius: '999px', background: pieGradient }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--s800)' }}>Material distribution</div>
                   <div style={{ fontSize: '12px', color: 'var(--s500)', marginTop: '6px' }}>{chartData.pie && chartData.pie.length ? `${chartData.pie[0]}% Mycelium · ${chartData.pie[1]}% Cardboard · ${chartData.pie[2]}% Kraft` : 'No data'}</div>
