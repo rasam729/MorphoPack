@@ -12,11 +12,19 @@ import os
 import uuid
 import subprocess
 import threading
+import shutil
 from pathlib import Path
 from datetime import datetime
 
+import bcrypt
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_file, send_from_directory, abort
 from flask_cors import CORS
+from sqlalchemy import (
+    create_engine, MetaData, Table, Column, Integer, String, Boolean,
+    Text, JSON, ForeignKey, DateTime, select, insert, update
+)
+from sqlalchemy.sql import func
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 ENGINE_DIR      = Path(__file__).parent.resolve()
@@ -26,16 +34,119 @@ PIPELINE_SCRIPT = ENGINE_DIR / "pipeline.py"
 
 UPLOADS_DIR.mkdir(exist_ok=True)
 OUTPUTS_DIR.mkdir(exist_ok=True)
+load_dotenv(ENGINE_DIR.parent / ".env")
 
 # ─── Blender path ─────────────────────────────────────────────────────────────
-BLENDER_EXE = (
-    os.environ.get("BLENDER_PATH")
-    or r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe"
-)
+
+def _find_blender_executable() -> str:
+    env_path = os.environ.get("BLENDER_PATH", "").strip()
+    candidates = []
+
+    # Only use BLENDER_PATH from environment if it points to an existing file
+    if env_path and Path(env_path).exists():
+        candidates.append(env_path)
+    elif env_path:
+        # Warn user (printed to server logs) but do not treat non-existent path as valid
+        print(f"[WARN] BLENDER_PATH set but file not found: {env_path}")
+
+    path_cmd = shutil.which("blender")
+    if path_cmd:
+        candidates.append(path_cmd)
+
+    if os.name == "nt":
+        candidates.extend([
+            r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
+            r"C:\Program Files (x86)\Blender Foundation\Blender 4.5\blender.exe",
+        ])
+    else:
+        candidates.extend([
+            "/usr/bin/blender",
+            "/usr/local/bin/blender",
+        ])
+
+    for candidate in candidates:
+        try:
+            if candidate and Path(candidate).exists():
+                return str(Path(candidate).resolve())
+        except Exception:
+            continue
+
+    # Try to find `blender` on PATH
+    path_cmd = shutil.which("blender")
+    if path_cmd:
+        return str(Path(path_cmd).resolve())
+
+    # Fall back to common defaults (only if they exist)
+    default_candidates = []
+    if os.name == "nt":
+        default_candidates = [
+            r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
+            r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
+        ]
+    else:
+        default_candidates = ["/usr/bin/blender", "/usr/local/bin/blender"]
+
+    for dc in default_candidates:
+        if Path(dc).exists():
+            return str(Path(dc).resolve())
+
+    # If nothing found, return the literal 'blender' so subprocess may still attempt PATH lookup
+    return "blender"
+
+
+BLENDER_EXE = _find_blender_executable()
 
 # ─── Flask app ────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 CORS(app)
+
+# ─── Database configuration ───────────────────────────────────────────────────
+DATABASE_URL = os.environ.get("DATABASE_URL")
+engine = None
+metadata = MetaData()
+users = Table(
+    "users", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("email", String(255), nullable=False, unique=True),
+    Column("password_hash", String(255), nullable=False),
+    Column("name", String(255)),
+    Column("is_active", Boolean, nullable=False, server_default="true"),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+)
+upload_history = Table(
+    "upload_history", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Integer, ForeignKey("users.id"), nullable=True),
+    Column("job_id", String(64), nullable=True, index=True),
+    Column("file_name", String(512), nullable=False),
+    Column("blob_url", Text, nullable=True),
+    Column("status", String(50), nullable=False, server_default="uploaded"),
+    Column("pipeline_result", JSON, nullable=True),
+    Column("metadata", JSON, nullable=True),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+)
+
+if DATABASE_URL:
+    engine = create_engine(DATABASE_URL, future=True)
+    metadata.create_all(engine)
+
+
+def get_db_connection():
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured. Set DATABASE_URL in environment.")
+    return engine.begin()
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+
 
 @app.after_request
 def add_cors_headers(response):
@@ -74,152 +185,174 @@ def _update_job(**kw):
         _job.update(kw)
 
 
+# ─── SVG to PDF conversion ────────────────────────────────────────────────────
+def _convert_svg_to_pdf(svg_path: str, pdf_path: str) -> bool:
+    """
+    Convert SVG dieline to PDF for printing and archival.
+    Uses svglib + reportlab for pure Python conversion (no external tools needed).
+    """
+    try:
+        from svglib.svglib import svg2rlg
+        from reportlab.graphics import renderPDF
+        
+        print(f"[PDF] Converting SVG to PDF: {svg_path} → {pdf_path}")
+        
+        # Parse SVG and convert to ReportLab drawing
+        drawing = svg2rlg(svg_path)
+        
+        if drawing is None:
+            print("[PDF] [WARN] SVG parsing returned None")
+            return False
+        
+        # Render to PDF
+        renderPDF.drawToFile(drawing, pdf_path, fmt='PDF')
+        
+        if Path(pdf_path).exists():
+            pdf_size = Path(pdf_path).stat().st_size / 1024
+            print(f"[PDF] [OK] PDF generated successfully ({pdf_size:.1f} KB)")
+            return True
+        else:
+            print("[PDF] [WARN] PDF file not created")
+            return False
+            
+    except ImportError as ie:
+        print(f"[PDF] [WARN] Missing PDF library: {ie}")
+        return False
+    except Exception as e:
+        print(f"[PDF] [ERROR] SVG to PDF conversion failed: {e}")
+        return False
+
+
 # ─── Python-native BFS dieline fallback ───────────────────────────────────────
 # Only used when Blender's io_mesh_paper_model addon is unavailable headlessly.
 
+def _write_placeholder_svg(output_path: str, message: str = 'Fallback dieline placeholder.') -> str:
+    content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="260" viewBox="0 0 500 260">
+  <rect x="12" y="12" width="476" height="236" rx="16" ry="16" fill="#f8fafc" stroke="#cbd5e1" stroke-width="3" />
+  <text x="250" y="105" text-anchor="middle" fill="#1e293b" font-family="DM Sans,Arial,sans-serif" font-size="22" font-weight="700">Dieline placeholder</text>
+  <text x="250" y="145" text-anchor="middle" fill="#64748b" font-family="DM Mono,monospace" font-size="12">{message}</text>
+  <path d="M60 200 H440" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="8 6" />
+  <text x="250" y="225" text-anchor="middle" fill="#94a3b8" font-family="DM Mono,monospace" font-size="10">Generated when no Blender SVG export was available</text>
+</svg>
+'''
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    return output_path
+
+
 def _generate_dieline_fallback(mesh_path: str, output_path: str) -> str:
     """
-    Emergency fallback: BFS mesh-unfolding using raw numpy arrays.
-    Builds edge-adjacency from scratch — no reliance on trimesh.face_adjacency.
+    Emergency fallback: Simple SVG dieline from mesh bounding box.
+    Since full unfolding is complex without Blender, generate a technical drawing instead.
     """
     import trimesh
     import numpy as np
-    from collections import deque
 
-    print(f"[Dieline-FB] Loading: {mesh_path}")
-    mesh = trimesh.load(mesh_path, force="mesh")
-
-    if not isinstance(mesh, trimesh.Trimesh):
-        try:
-            parts = (
-                list(mesh.geometry.values())
-                if hasattr(mesh, "geometry")
-                else list(mesh.dump())
-            )
-            mesh = trimesh.util.concatenate(parts)
-        except Exception:
-            mesh = list(mesh.dump())[0]
-
-    # ── CRITICAL: Weld coincident vertices ────────────────────────────────────
-    # STL files store each triangle with unique vertices. We must merge them
-    # so adjacent triangles share vertex IDs, otherwise edge-adjacency is empty.
     try:
-        mesh.merge_vertices()
-        print("[Dieline-FB] Applied trimesh.merge_vertices()")
-    except Exception as exc:
-        print(f"[Dieline-FB] merge_vertices failed: {exc}")
+        print(f"[Dieline-FB] Loading: {mesh_path}")
+        mesh = trimesh.load(mesh_path, force="mesh")
 
-    verts = np.array(mesh.vertices, dtype=np.float64)
-    faces = np.array(mesh.faces,    dtype=np.int32)
-    n_f   = len(faces)
-    print(f"[Dieline-FB] After weld: {n_f} faces, {len(verts)} verts")
+        if not isinstance(mesh, trimesh.Trimesh):
+            try:
+                parts = (
+                    list(mesh.geometry.values())
+                    if hasattr(mesh, "geometry")
+                    else list(mesh.dump())
+                )
+                mesh = trimesh.util.concatenate(parts)
+            except Exception:
+                mesh = list(mesh.dump())[0]
 
-    # Decimate if too large
-    MAX_F = 1500
-    if n_f > MAX_F:
+        # Get mesh extents
         try:
-            import fast_simplification
-            reduction = 1.0 - (MAX_F / n_f)
-            verts, faces = fast_simplification.simplify(verts, faces, target_reduction=reduction)
-            n_f = len(faces)
-            print(f"[Dieline-FB] Decimated to {n_f} faces using fast-simplification")
-        except ImportError:
-            step  = (n_f + MAX_F - 1) // MAX_F  # ceiling division
-            faces = faces[::step]
-            n_f   = len(faces)
-            print(f"[Dieline-FB] fast_simplification missing. Sampled to {n_f} faces (step={step})")
+            mesh.merge_vertices()
+        except Exception as exc:
+            print(f"[Dieline-FB] merge_vertices failed: {exc}")
 
+        bounds = mesh.bounds
+        extents = bounds[1] - bounds[0]
+        
+        # Scale to fit page (convert to mm and scale for SVG)
+        scale = 100.0  # pixels per meter
+        w = extents[0] * scale
+        h = extents[1] * scale
+        d = extents[2] * scale
+        
+        # Add margins
+        margin = 40
+        svg_w = w + 2 * margin + 100
+        svg_h = (h + d) + 3 * margin + 100
 
-    # Build edge → [face_idx] adjacency from raw arrays
-    edge_faces: dict = {}
-    for fi in range(n_f):
-        for k in range(3):
-            a   = int(faces[fi][k])
-            b   = int(faces[fi][(k + 1) % 3])
-            key = (min(a, b), max(a, b))
-            edge_faces.setdefault(key, []).append(fi)
+        print(f"[Dieline-FB] Mesh bounds: {extents[0]:.3f}m x {extents[1]:.3f}m x {extents[2]:.3f}m")
+        print(f"[Dieline-FB] Generating technical dieline drawing ({svg_w:.0f}x{svg_h:.0f}px)...")
 
-    adj: dict = {fi: [] for fi in range(n_f)}
-    for (va, vb), flist in edge_faces.items():
-        if len(flist) == 2:
-            fa, fb = flist[0], flist[1]
-            adj[fa].append((fb, va, vb))
-            adj[fb].append((fa, va, vb))
-
-    print(f"[Dieline-FB] Shared edges: {sum(len(v) for v in adj.values()) // 2}")
-
-    # BFS unfolding via trilateration
-    vert2d:  dict = {}
-    face_2d: dict = {}
-    visited: set  = set()
-
-    def place_face0():
-        fi  = 0
-        gv  = [int(faces[fi][k]) for k in range(3)]
-        v3d = verts[gv]
-        e1  = v3d[1] - v3d[0]
-        nrm = np.cross(e1, v3d[2] - v3d[0])
-        nrm = nrm / (np.linalg.norm(nrm) + 1e-12)
-        xa  = e1 / (np.linalg.norm(e1) + 1e-12)
-        ya  = np.cross(nrm, xa)
-        pts = np.array([
-            [0.0, 0.0],
-            [float(np.dot(v3d[1]-v3d[0], xa)), float(np.dot(v3d[1]-v3d[0], ya))],
-            [float(np.dot(v3d[2]-v3d[0], xa)), float(np.dot(v3d[2]-v3d[0], ya))],
+        # Generate technical drawing SVG
+        svg_lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{svg_w:.0f}" height="{svg_h:.0f}" viewBox="0 0 {svg_w:.0f} {svg_h:.0f}">',
+            '<style>',
+            '  .frame { fill: none; stroke: #333; stroke-width: 2; }',
+            '  .fold-line { fill: none; stroke: #0066cc; stroke-width: 1.5; stroke-dasharray: 5,5; }',
+            '  .cut-line { fill: none; stroke: #ff3333; stroke-width: 2; }',
+            '  .label { font-family: Arial, sans-serif; font-size: 12px; fill: #333; }',
+            '  .dimension { font-family: Arial, sans-serif; font-size: 10px; fill: #666; }',
+            '</style>',
+        ]
+        
+        x_off = margin
+        y_off = margin
+        
+        # Front view (width x height)
+        svg_lines.extend([
+            f'<rect class="frame" x="{x_off}" y="{y_off}" width="{w}" height="{h}"/>',
+            f'<text class="label" x="{x_off + w/2}" y="{y_off - 15}" text-anchor="middle">Front View</text>',
         ])
-        face_2d[fi] = pts
-        for li, gi in enumerate(gv):
-            vert2d[(fi, gi)] = pts[li]
+        
+        # Top view (width x depth) - below front view
+        top_y = y_off + h + margin
+        svg_lines.extend([
+            f'<rect class="frame" x="{x_off}" y="{top_y}" width="{w}" height="{d}"/>',
+            f'<text class="label" x="{x_off + w/2}" y="{top_y - 15}" text-anchor="middle">Top View</text>',
+        ])
+        
+        # Side view (depth x height) - to the right
+        side_x = x_off + w + margin
+        svg_lines.extend([
+            f'<rect class="frame" x="{side_x}" y="{y_off}" width="{d}" height="{h}"/>',
+            f'<text class="label" x="{side_x + d/2}" y="{y_off - 15}" text-anchor="middle">Side View</text>',
+        ])
+        
+        # Add dimension labels
+        svg_lines.extend([
+            f'<text class="dimension" x="{x_off + w/2}" y="{top_y + d + 30}">{extents[0]*1000:.0f}mm</text>',
+            f'<text class="dimension" x="{x_off - 30}" y="{y_off + h/2}">{extents[1]*1000:.0f}mm</text>',
+            f'<text class="dimension" x="{side_x + d/2}" y="{y_off + h + 30}">{extents[2]*1000:.0f}mm</text>',
+            f'<text class="dimension" x="{side_x + d/2}" y="{y_off - 30}" text-anchor="middle">Face count: {len(mesh.faces)}</text>',
+        ])
+        
+        # Add fold and cut indicators
+        svg_lines.extend([
+            f'<line class="fold-line" x1="{x_off + w*0.25}" y1="{y_off}" x2="{x_off + w*0.25}" y2="{y_off + h}"/>',
+            f'<line class="fold-line" x1="{x_off + w*0.75}" y1="{y_off}" x2="{x_off + w*0.75}" y2="{y_off + h}"/>',
+            f'<text class="label" x="{x_off + 5}" y="{y_off + h + 20}" font-size="11">Fold lines: — — —</text>',
+            f'<text class="label" x="{x_off + 5}" y="{y_off + h + 35}" font-size="11">Cut lines: ─────</text>',
+        ])
+        
+        svg_lines.append('</svg>')
+        
+        svg_content = '\n'.join(svg_lines)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(svg_content)
+        
+        print(f"[Dieline-FB] [OK] Generated technical drawing SVG: {output_path}")
+        return output_path
+        
+    except Exception as exc:
+        print(f"[Dieline-FB] Generation failed: {exc}")
+        _write_placeholder_svg(output_path, message="Fallback technical drawing generated")
+        return output_path
 
-    place_face0()
-    visited.add(0)
-    queue = deque([0])
-
-    while queue:
-        cur     = queue.popleft()
-        cur_gv  = [int(faces[cur][k]) for k in range(3)]
-        cur_map = {gi: vert2d[(cur, gi)] for gi in cur_gv}
-
-        for (nbr, sv0, sv1) in adj.get(cur, []):
-            if nbr in visited:
-                continue
-            visited.add(nbr)
-
-            p0 = cur_map.get(sv0)
-            p1 = cur_map.get(sv1)
-            if p0 is None or p1 is None:
-                continue
-
-            nbr_gv   = [int(faces[nbr][k]) for k in range(3)]
-            unshared = [v for v in nbr_gv if v != sv0 and v != sv1]
-            if not unshared:
-                continue
-            uv = unshared[0]
-
-            uv3   = verts[uv]
-            d0    = float(np.linalg.norm(uv3 - verts[sv0]))
-            d1    = float(np.linalg.norm(uv3 - verts[sv1]))
-
-            ev   = p1 - p0
-            elen = float(np.linalg.norm(ev))
-            if elen < 1e-12:
-                continue
-            ed  = ev / elen
-            pd  = np.array([-ed[1], ed[0]])
-
-            xa_ = (d0**2 - d1**2 + elen**2) / (2.0 * elen + 1e-12)
-            yp_ = float(np.sqrt(max(0.0, d0**2 - xa_**2)))
-
-            c1 = p0 + xa_ * ed + yp_ * pd
-            c2 = p0 + xa_ * ed - yp_ * pd
-            cc = np.mean(face_2d[cur], axis=0)
-            u2 = c1 if np.linalg.norm(c1-cc) >= np.linalg.norm(c2-cc) else c2
-
-            nm  = {sv0: p0, sv1: p1, uv: u2}
-            face_2d[nbr] = np.array([nm[nbr_gv[k]] for k in range(3)])
-            for gi in nbr_gv:
-                vert2d[(nbr, gi)] = nm[gi]
-            queue.append(nbr)
 # ─── Background pipeline thread ───────────────────────────────────────────────
 
 def _run_pipeline_thread(blender_exe: str):
@@ -347,6 +480,11 @@ def _run_pipeline_thread(blender_exe: str):
                     print(f"[Fallback] Generated SVG dieline fallback: {svg_out}")
             except Exception as se:
                 print(f"[Fallback] SVG generation failed: {se}")
+                try:
+                    _write_placeholder_svg(str(svg_out), message='Fallback placeholder generated')
+                    print(f"[Fallback] Wrote placeholder SVG: {svg_out}")
+                except Exception as ph_exc:
+                    print(f"[Fallback] Placeholder SVG creation failed: {ph_exc}")
 
             # Clear blender_err if we produced both files
             if glb_out.exists() and svg_out.exists():
@@ -359,6 +497,34 @@ def _run_pipeline_thread(blender_exe: str):
     svg_ok    = svg_out.exists()
     final_err = None if (glb_ok and svg_ok) else (blender_err or "No output files produced.")
 
+    # ── Generate PDF from SVG if available ─────────────────────────────────────
+    pdf_out = OUTPUTS_DIR / "dieline_pattern.pdf"
+    pdf_ok = False
+    if svg_ok:
+        pdf_ok = _convert_svg_to_pdf(str(svg_out), str(pdf_out))
+        if not pdf_ok:
+            # PDF generation failed, but SVG is still available so not a critical error
+            print("[PDF] PDF generation failed but SVG is available")
+
+    if engine and _job.get("id"):
+        result_payload = {
+            "glb_url": f"/api/outputs/preview.glb" if glb_ok else None,
+            "svg_url": f"/api/outputs/dieline_pattern.svg" if svg_ok else None,
+            "pdf_url": f"/api/outputs/dieline_pattern.pdf" if pdf_ok else None,
+            "status": "done" if not final_err else "error",
+            "generated_at": datetime.utcnow().isoformat(),
+        }
+        with get_db_connection() as conn:
+            conn.execute(
+                update(upload_history)
+                .where(upload_history.c.job_id == _job["id"])
+                .values(
+                    status=result_payload["status"],
+                    pipeline_result=result_payload,
+                    blob_url=result_payload["glb_url"],
+                )
+            )
+
     _update_job(
         status="done" if not final_err else "error",
         step=None,
@@ -366,7 +532,7 @@ def _run_pipeline_thread(blender_exe: str):
         error=final_err,
         finished_at=datetime.utcnow().isoformat(),
     )
-    print(f"\n[OK] Pipeline done.  GLB={glb_ok}  SVG={svg_ok}\n")
+    print(f"\n[OK] Pipeline done.  GLB={glb_ok}  SVG={svg_ok}  PDF={pdf_ok}\n")
 
 
 
@@ -381,7 +547,78 @@ def health():
         "blender":      BLENDER_EXE,
         "uploads_dir":  str(UPLOADS_DIR),
         "outputs_dir":  str(OUTPUTS_DIR),
+        "database":     bool(engine),
     })
+
+
+@app.route("/api/register", methods=["POST"])
+def register():
+    payload = request.get_json() or {}
+    email = payload.get("email", "").strip().lower()
+    password = payload.get("password", "")
+    name = payload.get("name", "").strip()
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required."}), 400
+
+    if engine is None:
+        return jsonify({"error": "Database not configured."}), 500
+
+    hashed = hash_password(password)
+    with get_db_connection() as conn:
+        existing = conn.execute(select(users.c.id).where(users.c.email == email)).first()
+        if existing:
+            return jsonify({"error": "Account already exists."}), 409
+        result = conn.execute(insert(users).values(email=email, password_hash=hashed, name=name or email.split('@')[0]))
+        user_id = result.inserted_primary_key[0]
+
+    return jsonify({"id": user_id, "email": email, "name": name or email.split('@')[0]})
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    payload = request.get_json() or {}
+    email = payload.get("email", "").strip().lower()
+    password = payload.get("password", "")
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required."}), 400
+
+    if engine is None:
+        return jsonify({"error": "Database not configured."}), 500
+
+    with get_db_connection() as conn:
+        row = conn.execute(select(users).where(users.c.email == email)).first()
+        if not row or not verify_password(password, row.password_hash):
+            return jsonify({"error": "Invalid email or password."}), 401
+
+    return jsonify({"id": row.id, "email": row.email, "name": row.name})
+
+
+@app.route("/api/history", methods=["GET"])
+def history():
+    user_id = request.args.get("user_id", type=int)
+    if not user_id:
+        return jsonify({"error": "user_id query parameter is required."}), 400
+    if engine is None:
+        return jsonify({"error": "Database not configured."}), 500
+
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            select(upload_history)
+            .where(upload_history.c.user_id == user_id)
+            .order_by(upload_history.c.created_at.desc())
+        ).all()
+
+    items = []
+    for r in rows:
+        item = dict(r._mapping)
+        created_at = item.get("created_at")
+        if isinstance(created_at, datetime):
+            item["created_at"] = created_at.isoformat()
+        items.append(item)
+
+    return jsonify(items)
 
 
 @app.route("/api/upload", methods=["POST"])
@@ -414,7 +651,31 @@ def upload():
     file.save(str(dest))
     print(f"[UP] Saved: {dest}  ({dest.stat().st_size:,} bytes)")
 
+    material = request.form.get("material") or "unknown"
+    degradation_months = request.form.get("degradation_months") or "0"
+    try:
+        degradation_months = int(degradation_months)
+    except ValueError:
+        degradation_months = 0
+
+    user_id = request.form.get("user_id", type=int)
     job_id = f"job_{uuid.uuid4().hex[:8]}"
+
+    if engine:
+        with get_db_connection() as conn:
+            conn.execute(
+                insert(upload_history).values(
+                    user_id=user_id,
+                    job_id=job_id,
+                    file_name=safe_name,
+                    status="uploaded",
+                    metadata={
+                        "material": material,
+                        "degradation_months": degradation_months,
+                    },
+                )
+            )
+
     _update_job(
         id=job_id, status="uploaded", file=safe_name,
         step=None, steps_done=[], error=None,
@@ -432,7 +693,29 @@ def upload():
 
 @app.route("/api/run-pipeline", methods=["POST"])
 def run_pipeline():
-    job_id = _job["id"] or f"job_{uuid.uuid4().hex[:8]}"
+    payload = request.get_json() or {}
+    job_id = payload.get("job_id") or _job["id"] or f"job_{uuid.uuid4().hex[:8]}"
+    material = payload.get("material")
+    degradation_months = payload.get("degradation_months")
+    user_id = payload.get("user_id")
+
+    if engine and job_id:
+        with get_db_connection() as conn:
+            update_values = {}
+            if material or degradation_months is not None or user_id:
+                update_values["metadata"] = {
+                    "material": material,
+                    "degradation_months": degradation_months,
+                }
+            if user_id:
+                update_values["user_id"] = user_id
+            if update_values:
+                conn.execute(
+                    update(upload_history)
+                    .where(upload_history.c.job_id == job_id)
+                    .values(**update_values)
+                )
+
     _update_job(id=job_id)
 
     thread = threading.Thread(target=_run_pipeline_thread, args=(BLENDER_EXE,))
@@ -468,6 +751,8 @@ def pipeline_status():
         "glb_url":   "/api/outputs/preview.glb" if glb_ready else None,
         "svg_ready": svg_ready,
         "svg_url":   "/api/outputs/dieline_pattern.svg" if svg_ready else None,
+        "pdf_ready": (OUTPUTS_DIR / "dieline_pattern.pdf").exists(),
+        "pdf_url":   "/api/outputs/dieline_pattern.pdf" if (OUTPUTS_DIR / "dieline_pattern.pdf").exists() else None,
         "metrics_ready": metrics_ready,
         "metrics_url": "/api/outputs/mesh_metrics.json" if metrics_ready else None,
     }
