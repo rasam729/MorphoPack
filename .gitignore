@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+
+# Environment
+.env
+*.local
+
+# Build artifacts
+dist/
+build/
+
+# Logs
+*.log
+pipeline_dump*.txt
+old_pipeline_script.txt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
