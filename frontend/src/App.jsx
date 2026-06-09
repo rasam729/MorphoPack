@@ -1578,6 +1578,88 @@ function Dashboard({ user, onLogout }) {
                 </div>
               </div>
             </div>
+            <div style={{ padding: '18px 16px 6px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div className="pbi-card" style={{ padding: '12px' }}>
+                  <div className="pbi-hd"><div className="pbi-ttl">Material Mix</div><span className="pbi-badge">PIE</span></div>
+                  <div className="pbi-body" style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingTop: '12px' }}>
+                    <svg width="160" height="120" viewBox="0 0 160 120">
+                      <g transform="translate(80,60)">
+                        {(() => {
+                          const vals = chartData.pie && chartData.pie.length === 3 ? chartData.pie : [40,30,30];
+                          const total = vals.reduce((a,b) => a+b, 0) || 100;
+                          let start = 0;
+                          const colors = ['var(--g500)', '#22d3ee', '#a78bfa'];
+                          return vals.map((v, i) => {
+                            const angle = (v/total) * Math.PI * 2;
+                            const x1 = Math.cos(start) * 40;
+                            const y1 = Math.sin(start) * 40;
+                            const x2 = Math.cos(start + angle) * 40;
+                            const y2 = Math.sin(start + angle) * 40;
+                            const large = angle > Math.PI ? 1 : 0;
+                            const path = `M0 0 L ${x1} ${y1} A 40 40 0 ${large} 1 ${x2} ${y2} Z`;
+                            start += angle;
+                            return <path key={i} d={path} fill={colors[i]} stroke="#fff" strokeWidth="0.5" />;
+                          });
+                        })()}
+                      </g>
+                    </svg>
+                    <div style={{ flex: 1 }}>
+                      {(chartData.pie && chartData.pie.length === 3 ? chartData.pie : [40,30,30]).map((p, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                          <div style={{ width: '10px', height: '10px', background: idx===0? 'var(--g500)' : idx===1? '#22d3ee' : '#a78bfa', borderRadius: '2px' }} />
+                          <div style={{ fontSize: '13px', fontWeight: 600 }}>{idx===0? 'Volume' : idx===1? 'Circularity' : 'CO₂'}</div>
+                          <div style={{ marginLeft: 'auto', color: 'var(--s500)' }}>{p}%</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="pbi-card" style={{ padding: '12px' }}>
+                  <div className="pbi-hd"><div className="pbi-ttl">Monthly Uplift</div><span className="pbi-badge">BAR</span></div>
+                  <div className="pbi-body" style={{ padding: '12px' }}>
+                    <svg width="100%" height="120" viewBox="0 0 240 120" preserveAspectRatio="none">
+                      {(() => {
+                        const vals = chartData.bar && chartData.bar.length ? chartData.bar : [12,24,18,28,36,44,32];
+                        const max = Math.max(...vals, 1);
+                        return vals.map((v, i) => {
+                          const w = 24; const gap = 8; const x = i * (w + gap) + 12;
+                          const h = (v / max) * 88;
+                          return <rect key={i} x={x} y={110 - h} width={w} height={h} rx={4} fill={i===vals.length-1? 'var(--g500)' : '#60a5fa'} />;
+                        });
+                      })()}
+                    </svg>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '12px', color: 'var(--s500)' }}>
+                      {['Jan','Feb','Mar','Apr','May','Jun','Jul'].map(m => <div key={m}>{m}</div>)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pbi-card" style={{ padding: '12px' }}>
+                <div className="pbi-hd"><div className="pbi-ttl">Dieline Trend</div><span className="pbi-badge">LINE</span></div>
+                <div className="pbi-body" style={{ padding: '12px' }}>
+                  <svg width="100%" height="180" viewBox="0 0 600 180" preserveAspectRatio="none">
+                    {(() => {
+                      const vals = chartData.line && chartData.line.length ? chartData.line : [10,20,18,24,30,36,28];
+                      const max = Math.max(...vals, 1);
+                      const points = vals.map((v,i) => `${(i/(vals.length-1))*560 + 20},${160 - (v/max)*120}`).join(' ');
+                      return (
+                        <>
+                          <polyline points={points} fill="none" stroke="var(--g500)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                          {vals.map((v,i) => <circle key={i} cx={(i/(vals.length-1))*560 + 20} cy={160 - (v/max)*120} r={4} fill="#fff" stroke="var(--g500)" strokeWidth="2" />)}
+                        </>
+                      );
+                    })()}
+                  </svg>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '12px', color: 'var(--s500)' }}>
+                    <div>0 mo</div>
+                    <div style={{ textAlign: 'center' }}>{degMonth} mo</div>
+                    <div>24 mo</div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <div className="sdg-row">
               <span className="sdg-tag" style={{ color: 'var(--g800)', background: 'var(--g50)', border: '1px solid var(--g200)' }}>SDG 12 · Responsible Consumption</span>
               <span className="sdg-tag" style={{ color: 'var(--g800)', background: 'var(--g50)', border: '1px solid var(--g200)' }}>SDG 13 · Climate Action</span>
