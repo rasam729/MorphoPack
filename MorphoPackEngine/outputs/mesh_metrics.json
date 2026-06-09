@@ -1,0 +1,18 @@
+{
+  "bounding_box": {
+    "width_m": 99.9934,
+    "height_m": 99.9977,
+    "depth_m": 100.0014,
+    "volume_m3": 999924.469276
+  },
+  "mesh": {
+    "surface_area_m2": 47119.917322,
+    "volume_m3": 785256.689772,
+    "face_count": 1348,
+    "vertex_count": 676
+  },
+  "packaging_efficiency": {
+    "volume_utilization": 78.53,
+    "surface_to_volume_ratio": 0.06
+  }
+}
