@@ -1,18 +1,18 @@
 {
   "bounding_box": {
-    "width_m": 1.904,
-    "height_m": 2.002,
-    "depth_m": 1.3198,
-    "volume_m3": 5.030804
+    "width_m": 57.4475,
+    "height_m": 50.2582,
+    "depth_m": 135.0019,
+    "volume_m3": 389777.930582
   },
   "mesh": {
-    "surface_area_m2": 16.288547,
-    "volume_m3": 0.761553,
-    "face_count": 160,
-    "vertex_count": 80
+    "surface_area_m2": 18288.275309,
+    "volume_m3": 149131.41273,
+    "face_count": 1499,
+    "vertex_count": 750
   },
   "packaging_efficiency": {
-    "volume_utilization": 15.14,
-    "surface_to_volume_ratio": 21.39
+    "volume_utilization": 38.26,
+    "surface_to_volume_ratio": 0.12
   }
 }
