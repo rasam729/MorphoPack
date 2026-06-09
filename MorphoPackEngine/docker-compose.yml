@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  engine:
+    build: .
+    container_name: morphopack_engine
+    ports:
+      - "5050:5050"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+    environment:
+      - BLENDER_PATH=/usr/bin/blender
+    restart: unless-stopped
