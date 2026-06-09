@@ -717,6 +717,7 @@ function Dashboard({ user, onLogout }) {
   const [historyFilter, setHistoryFilter] = useState('all');
   const [metricsData, setMetricsData] = useState(null);
   const [measurementsLoading, setMeasurementsLoading] = useState(false);
+  const [chartData, setChartData] = useState({ bar: [], line: [], pie: [] });
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [dragStart, setDragStart] = useState(null);
@@ -977,6 +978,47 @@ function Dashboard({ user, onLogout }) {
       .finally(() => setMeasurementsLoading(false));
   }, [selectedHistoryItem?.job_id, selectedHistoryItem?.pipeline_result?.status]);
 
+  // Derive mock measurements and chart data from SVG content / selection
+  useEffect(() => {
+    const has = Boolean(outputs.svg || svgContent || file || selectedHistoryItem);
+    if (!has) {
+      setMetricsData(null);
+      setChartData({ bar: [], line: [], pie: [] });
+      return;
+    }
+
+    setMeasurementsLoading(true);
+    // Small async to simulate network work and keep UI responsive
+    setTimeout(() => {
+      try {
+        const svgText = svgContent || '';
+        const pathCount = (svgText.match(/<path\b/gi) || []).length || 3;
+        const rectCount = (svgText.match(/<rect\b/gi) || []).length || 1;
+        const sizeSeed = svgText.length || (file ? Math.min(120000, file.size) : 2000);
+
+        const width = Math.max(40, Math.round((pathCount * 6) + ((sizeSeed % 800) / 10)));
+        const height = Math.max(40, Math.round((rectCount * 12) + ((sizeSeed % 600) / 12)));
+        const area = Math.round((width * height) / 10);
+        const fold = Math.round((pathCount * 2) + (height / 10));
+
+        const mock = {
+          width, height, area, fold_line_length: fold,
+        };
+
+        setMetricsData(mock);
+
+        // Build chart data (deterministic-ish from seed)
+        const base = Math.max(6, Math.min(12, Math.round((sizeSeed % 1000) / 90) + 6));
+        const line = Array.from({ length: 7 }, (_, i) => Math.round(30 + (i * 6) + ((sizeSeed >> i) % 7)));
+        const bar = Array.from({ length: 7 }, (_, i) => Math.round(20 + ((pathCount * 3) + i * 4 + (rectCount * 2))));
+        const pieTotal = (activeMat.v + activeMat.c + activeMat.co) || 100;
+        const pie = [activeMat.v / pieTotal, activeMat.c / pieTotal, activeMat.co / pieTotal].map(p => Math.round(p * 100));
+
+        setChartData({ bar, line, pie });
+      } finally { setMeasurementsLoading(false); }
+    }, 280);
+  }, [svgContent, outputs.svg, file, matKey, degMonth, selectedHistoryItem]);
+
   return (
     <div className="app">
       {/* Topbar */}
@@ -1133,18 +1175,18 @@ function Dashboard({ user, onLogout }) {
           <div className="sb-section" style={{ marginTop: '15px' }}>
             <div className="section-label">Analytics overview</div>
             <div className="metric-grid" style={{ gridTemplateColumns: '1fr', gap: '10px' }}>
-              {[
-                { lbl: 'Annual CO₂ impact', value: `${activeMat.ann.toFixed(1)} t`, note: 'Estimated fleet reduction' },
-                { lbl: 'Void fill reduction', value: `${activeMat.void.toFixed(2)} m³`, note: 'Per optimized unit' },
-                { lbl: 'Shipment efficiency', value: `+${activeMat.eff}%`, note: 'Projected packaging savings' },
-              ].map((item, idx) => (
-                <div key={idx} className="mc" style={{ borderLeftColor: 'var(--g500)', padding: '14px', borderRadius: '12px', border: '1px solid var(--s200)' }}>
-                  <div className="mc-lbl">{item.lbl}</div>
-                  <div className="mc-val" style={{ color: 'var(--s900)', fontSize: '24px', margin: '10px 0 6px' }}>{item.value}</div>
-                  <div className="mc-unit" style={{ color: 'var(--s500)', fontSize: '12px' }}>{item.note}</div>
-                </div>
-              ))}
-            </div>
+                {[
+                  { lbl: 'Annual CO₂ impact', value: `${analyticsData.co2.toFixed(1)} t`, note: hasUploadedMesh ? 'Estimated fleet reduction' : '0 until upload' },
+                  { lbl: 'Void fill reduction', value: `${analyticsData.avoided.toFixed(2)} m³`, note: hasUploadedMesh ? 'Per optimized unit' : '0 until upload' },
+                  { lbl: 'Shipment efficiency', value: analyticsData.efficiency ? `+${analyticsData.efficiency}%` : '+0%', note: hasUploadedMesh ? 'Projected packaging savings' : '0 until upload' },
+                ].map((item, idx) => (
+                  <div key={idx} className="mc" style={{ borderLeftColor: 'var(--g500)', padding: '14px', borderRadius: '12px', border: '1px solid var(--s200)' }}>
+                    <div className="mc-lbl">{item.lbl}</div>
+                    <div className="mc-val" style={{ color: 'var(--s900)', fontSize: '24px', margin: '10px 0 6px' }}>{item.value}</div>
+                    <div className="mc-unit" style={{ color: 'var(--s500)', fontSize: '12px' }}>{item.note}</div>
+                  </div>
+                ))}
+              </div>
           </div>
         )}
       </div>
@@ -1391,10 +1433,10 @@ function Dashboard({ user, onLogout }) {
             {renderGauge()}
             <div className="metric-grid">
               {[
-                { lbl: 'Void Fill Volume Eliminated', val: activeMat.void.toFixed(2), unit: 'cubic metres · per unit', trend: '↑ 23% vs standard box', bc: 'var(--g400)' },
-                { lbl: 'Container Efficiency Boost', val: `+${activeMat.eff}%`, unit: 'fleet-wide improvement', trend: '↑ cube utilisation', color: 'var(--g700)', bc: 'var(--g300)' },
-                { lbl: 'CO₂ Saved per Shipment', val: activeMat.co2.toFixed(2), unit: 'kg CO₂ per dispatch', trend: '↑ Li & Wang 2026', bc: '#22d3ee' },
-                { lbl: 'Carbon Ripple · Annual', val: activeMat.ann.toFixed(1), unit: 'tonnes CO₂ · 500/mo fleet', trend: '↑ SDG 12 + 13 aligned', bc: '#a78bfa' },
+                { lbl: 'Void Fill Volume Eliminated', val: `${analyticsData.avoided.toFixed(2)} m³`, unit: 'cubic metres · per unit', trend: hasUploadedMesh ? '↑ 23% vs standard box' : '0 until upload', bc: 'var(--g400)' },
+                { lbl: 'Container Efficiency Boost', val: hasUploadedMesh ? `+${analyticsData.efficiency}%` : '+0%', unit: 'fleet-wide improvement', trend: hasUploadedMesh ? '↑ cube utilisation' : '0 until upload', color: 'var(--g700)', bc: 'var(--g300)' },
+                { lbl: 'CO₂ Saved per Shipment', val: `${analyticsData.co2.toFixed(2)} kg`, unit: 'kg CO₂ per dispatch', trend: hasUploadedMesh ? 'modeled' : '0 until upload', bc: '#22d3ee' },
+                { lbl: 'Carbon Ripple · Annual', val: `${analyticsData.co2 ? (analyticsData.co2 * 500).toFixed(1) : 0} t`, unit: 'tonnes CO₂ · 500/mo fleet', trend: hasUploadedMesh ? '↑ SDG 12 + 13 aligned' : '0 until upload', bc: '#a78bfa' },
               ].map((m, i) => (
                 <div key={i} className="mc" style={{ borderLeftColor: m.bc }}>
                   <div className="mc-lbl">{m.lbl}</div>
@@ -1422,6 +1464,23 @@ function Dashboard({ user, onLogout }) {
                 <div className="pbi-stats">
                   {[['6,200','Fleet shipments'],['2.1t','CO₂ avoided'],['A+','ESG grade']].map(([v,l]) => (
                     <div key={l} className="pbi-stat"><div className="pbi-sv">{v}</div><div className="pbi-sl">{l}</div></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', margin: '12px 15px' }}>
+              <div className="mc" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                <div style={{ width: '72px', height: '72px', borderRadius: '999px', background: `conic-gradient(${chartData.pie && chartData.pie.length ? `var(--g500) ${chartData.pie[0]}% , #22d3ee ${chartData.pie[0]}% ${chartData.pie[0]+chartData.pie[1]}% , #a78bfa ${chartData.pie[0]+chartData.pie[1]}% 100%` : '#f1f5f9')}` }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--s800)' }}>Material distribution</div>
+                  <div style={{ fontSize: '12px', color: 'var(--s500)', marginTop: '6px' }}>{chartData.pie && chartData.pie.length ? `${chartData.pie[0]}% Mycelium · ${chartData.pie[1]}% Cardboard · ${chartData.pie[2]}% Kraft` : 'No data'}</div>
+                </div>
+              </div>
+              <div className="mc">
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--s800)' }}>Dieline trend</div>
+                <div style={{ height: '72px', position: 'relative', marginTop: '8px', background: 'linear-gradient(180deg,#fff,#f8fafc)', borderRadius: '8px', overflow: 'hidden' }}>
+                  {(chartData.line.length ? chartData.line : [10,20,18,24,30,36,28]).map((v,i) => (
+                    <span key={i} style={{ position: 'absolute', left: `${(i/(chartData.line.length-1 || 6))*100}%`, bottom: `${Math.min(92, v)}%`, width: '6px', height: '6px', background: 'var(--g500)', borderRadius: '999px', transform: 'translateX(-50%)' }} />
                   ))}
                 </div>
               </div>
@@ -1503,13 +1562,13 @@ function Dashboard({ user, onLogout }) {
               </div>
               <div className="pbi-body">
                 <div className="mini-chart">
-                  {[32,44,40,47,55,63,72].map((v,i) => <div key={i} className={`bar ${i===6?'hl':''}`} style={{ height: `${(v/88)*48}px` }} />)}
+                  {(chartData.bar.length ? chartData.bar : [12,24,18,28,36,44,32]).map((v,i) => <div key={i} className={`bar ${i===6?'hl':''}`} style={{ height: `${Math.min(88, v)/88*48}px` }} />)}
                 </div>
                 <div className="chart-lbs">
                   {['J','F','M','A','M','J','J'].map((m,i) => <span key={i}>{m}</span>)}
                 </div>
                 <div className="pbi-stats">
-                  {[['7,400','Projected shipments'],['2.8t','CO₂ reduced'],['A+','ESG projection']].map(([v,l]) => (
+                  {[[hasUploadedMesh ? `${Math.round((analyticsData.efficiency||0)*100)}` : '0','Projected shipments'],[`${analyticsData.co2.toFixed(2)}t`,'CO₂ reduced'],[hasUploadedMesh ? 'A+' : 'N/A','ESG projection']].map(([v,l]) => (
                     <div key={l} className="pbi-stat"><div className="pbi-sv">{v}</div><div className="pbi-sl">{l}</div></div>
                   ))}
                 </div>
