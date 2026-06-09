@@ -1,0 +1,13 @@
+{
+  "name": "morphopack",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "install:frontend": "npm install --prefix frontend",
+    "bootstrap": "npm run install:frontend && node ./scripts/setup-backend.js",
+    "docker:build": "docker build -t morphopack-engine ./MorphoPackEngine",
+    "docker:up": "docker compose -f MorphoPackEngine/docker-compose.yml up --build",
+    "docker:down": "docker compose -f MorphoPackEngine/docker-compose.yml down",
+    "postinstall": "npm run bootstrap"
+  }
+}
