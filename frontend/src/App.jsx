@@ -177,6 +177,10 @@ const GLOBAL_CSS = `
   .brand-name em{color:var(--g600);font-style:normal}
   .brand-sub{font-family:var(--font-mono);font-size:9.5px;color:var(--s400);letter-spacing:.4px;margin-top:1px}
   .topbar-right{display:flex;align-items:center;gap:10px}
+  .topbar-tabs{display:flex;gap:8px;align-items:center;margin-left:28px}
+  .tb-tab{font-family:var(--font-mono);font-size:11px;padding:8px 12px;border-radius:999px;border:1px solid transparent;background:transparent;color:var(--s500);cursor:pointer;transition:all .15s}
+  .tb-tab.active{background:var(--g50);border-color:var(--g200);color:var(--g700)}
+  .tb-tab:hover{background:var(--s100);color:var(--s700)}
   .status-pill{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--g700);background:var(--g50);border:1px solid var(--g200);border-radius:20px;padding:4px 11px;font-family:var(--font-mono)}
   .pulse{width:6px;height:6px;border-radius:50%;background:var(--g500);animation:pulseAnim 2s ease-in-out infinite}
   @keyframes pulseAnim{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.75)}}
@@ -258,7 +262,7 @@ const GLOBAL_CSS = `
   .divider{color:var(--s300)}
   .legend-cut{display:inline-block;width:20px;height:2px;background:#166534}
   .svg-container{flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;background:#e2e8f0}
-  .svg-wrapper{background:#ffffff;box-shadow:var(--shadow-md);transition:transform 0.2s ease-out;display:flex;align-items:center;justify-content:center}
+  .svg-wrapper{background:#ffffff;box-shadow:var(--shadow-md);transition:transform 0.2s ease-out;display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none}
   .an-section{padding:15px 15px 0}
   .an-title{font-size:12.5px;font-weight:500;color:var(--s800);line-height:1.35}
   .an-sub{font-family:var(--font-mono);font-size:9px;color:var(--s400);margin-top:2px}
@@ -317,7 +321,7 @@ const MATS = {
   cardboard:{lbl:'Corrugated Cardboard',dot:'#f59e0b',desc:'Circularity: 0.74 · Mechanical recycling pathway',ss:58,v:65,c:74,co:42,void:0.41,eff:29,co2:0.19,ann:1.1},
   kraft:{lbl:'Recycled Kraft Fibers',dot:'#78716c',desc:'Circularity: 0.80 · Mixed EoL — compost + paper recycle',ss:65,v:74,c:80,co:48,void:0.44,eff:33,co2:0.23,ann:1.4}
 };
-const API_BASE='http://localhost:5050/api';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5050/api';
 
 /* ════════════════════════════════════════════════
    LANDING PAGE
@@ -539,6 +543,7 @@ function LoginPage({ onLogin, onBack }) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState('login');
 
   const validate = () => {
     const e = {};
@@ -549,17 +554,45 @@ function LoginPage({ onLogin, onBack }) {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setLoading(true);
     setErrors({});
-    setTimeout(() => { setLoading(false); onLogin({ email, name: email.split('@')[0] }); }, 900);
+
+    try {
+      const endpoint = mode === 'register' ? `${API_BASE}/register` : `${API_BASE}/login`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name: email.split('@')[0] }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrors({ form: data.error || 'Authentication failed' });
+      } else {
+        const payload = data.user || data;
+        onLogin({
+          id: payload.id ?? payload.user_id ?? 0,
+          email: payload.email,
+          name: payload.name || payload.email?.split('@')[0] || 'Guest',
+        });
+      }
+    } catch (err) {
+      setErrors({ form: err.message || 'Network error' });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDemo = () => {
+  const handleDemo = async () => {
     setLoading(true);
-    setTimeout(() => { setLoading(false); onLogin({ email: 'demo@morphopack.ai', name: 'Demo User' }); }, 500);
+    try {
+      onLogin({ email: 'demo@morphopack.ai', name: 'Demo User', id: 0 });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -624,15 +657,25 @@ function LoginPage({ onLogin, onBack }) {
           />
           {errors.password && <div className="login-error-msg">⚠ {errors.password}</div>}
         </div>
+        {errors.form && <div className="login-error-msg" style={{ marginBottom: '14px' }}>⚠ {errors.form}</div>}
 
         <button className="login-submit" onClick={handleSubmit} disabled={loading}>
           {loading ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin .7s linear infinite', display: 'inline-block' }} />
-              Signing in…
+              {mode === 'register' ? 'Creating account…' : 'Signing in…'}
             </span>
-          ) : 'Sign In →'}
+          ) : (mode === 'register' ? 'Create Account' : 'Sign In →')}
         </button>
+
+        <div style={{ marginTop: '12px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+          <button className="login-demo" style={{ flex: 1 }} onClick={handleDemo} disabled={loading}>
+            Continue with Demo Access
+          </button>
+          <button className="login-demo" style={{ flex: 1, background: 'transparent', borderColor: 'rgba(100,116,139,.2)', color: 'var(--s700)' }} onClick={() => setMode(mode === 'login' ? 'register' : 'login')} disabled={loading}>
+            {mode === 'login' ? 'Create account' : 'Back to sign in'}
+          </button>
+        </div>
 
         <div className="login-divider"><span>or</span></div>
         <button className="login-demo" onClick={handleDemo} disabled={loading}>
@@ -666,8 +709,20 @@ function Dashboard({ user, onLogout }) {
   const [matKey, setMatKey] = useState('mycelium');
   const [degMonth, setDegMonth] = useState(6);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [jobId, setJobId] = useState(null);
+  const [activeSection, setActiveSection] = useState('workspace');
+  const [historyItems, setHistoryItems] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [selectedHistoryId, setSelectedHistoryId] = useState(null);
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [metricsData, setMetricsData] = useState(null);
+  const [measurementsLoading, setMeasurementsLoading] = useState(false);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [dragStart, setDragStart] = useState(null);
   const fileInputRef = useRef(null);
   const dielineRef = useRef(null);
+  const svgWrapperRef = useRef(null);
   const mat = MATS[matKey];
 
   const toggleFullScreen = () => {
@@ -678,27 +733,82 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => {
     let interval;
     if (pipelineRunning) {
-      interval = setInterval(async () => {
+      const poll = async () => {
         try {
           const res = await fetch(`${API_BASE}/pipeline-status`);
           const data = await res.json();
           if (data.status === 'done' || data.status === 'error') {
             setPipelineRunning(false);
             if (data.error) setError(data.error);
-            const newOutputs = { ...outputs };
-            if (data.outputs?.glb_ready) newOutputs.glb = `${API_BASE.replace('/api','')}${data.outputs.glb_url}?t=${Date.now()}`;
+            setOutputs(prev => {
+              const next = { ...prev };
+              if (data.outputs?.glb_ready) next.glb = `${API_BASE.replace('/api','')}${data.outputs.glb_url}?t=${Date.now()}`;
+              if (data.outputs?.svg_ready) next.svg = `${API_BASE.replace('/api','')}${data.outputs.svg_url}?t=${Date.now()}`;
+              return next;
+            });
             if (data.outputs?.svg_ready) {
               const svgUrl = `${API_BASE.replace('/api','')}${data.outputs.svg_url}?t=${Date.now()}`;
-              newOutputs.svg = svgUrl;
               fetch(svgUrl).then(r => r.text()).then(setSvgContent).catch(console.error);
             }
-            setOutputs(newOutputs);
+            await fetchHistory();
           }
-        } catch (err) { console.error(err); }
-      }, 1500);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      interval = setInterval(poll, 1500);
+      poll();
     }
     return () => clearInterval(interval);
-  }, [pipelineRunning, outputs]);
+  }, [pipelineRunning]);
+
+  const fetchHistory = async () => {
+    if (!user?.id) return;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/history?user_id=${user.id}`);
+      if (!res.ok) throw new Error('Unable to load history');
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : [];
+      const normalized = items.map(item => {
+        const meta = item.metadata || {};
+        const pipeline = item.pipeline_result || {};
+        return {
+          ...item,
+          material: item.material || meta.material || 'Unknown',
+          degradation_months: item.degradation_months ?? meta.degradation_months ?? 0,
+          status: item.status || pipeline.status || 'pending',
+          svg_url: pipeline.svg_url || item.svg_url || null,
+          glb_url: pipeline.glb_url || item.glb_url || null,
+          mesh_metrics: pipeline.mesh_metrics || item.mesh_metrics || null,
+        };
+      });
+      setHistoryItems(normalized);
+      setSelectedHistoryId(prev => {
+        if (normalized.some(item => item.id === prev)) return prev;
+        return normalized[0]?.id ?? null;
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetchHistory();
+  }, [user?.id]);
+
+  const filteredHistoryItems = historyFilter === 'all'
+    ? historyItems
+    : historyItems.filter(item => item.material === historyFilter);
+
+  useEffect(() => {
+    if (selectedHistoryId && !filteredHistoryItems.some(item => item.id === selectedHistoryId)) {
+      setSelectedHistoryId(filteredHistoryItems[0]?.id ?? null);
+    }
+  }, [historyFilter, filteredHistoryItems, selectedHistoryId]);
 
   useEffect(() => {
     if (!document.querySelector('script[src*="model-viewer"]')) {
@@ -713,19 +823,33 @@ function Dashboard({ user, onLogout }) {
     setFile(selectedFile); setFileName(selectedFile.name); setError(null);
     setOutputs({ glb: null, svg: null }); setSvgContent(null); setUploadProgress(0);
     const iv = setInterval(() => setUploadProgress(p => { if (p >= 100) { clearInterval(iv); return 100; } return p + Math.random() * 11 + 4; }), 75);
-    const fd = new FormData(); fd.append('mesh', selectedFile);
+    const fd = new FormData();
+    fd.append('mesh', selectedFile);
+    fd.append('user_id', user?.id ?? 0);
+    fd.append('material', matKey);
+    fd.append('degradation_months', String(degMonth));
     try {
       const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
+      setJobId(data.job_id);
     } catch (err) { setError(err.message); }
   };
 
   const runPipeline = async () => {
     if (!file || pipelineRunning) return;
-    setError(null); setPipelineRunning(true); setOutputs({ glb: null, svg: null }); setSvgContent(null);
+    setError(null); setPipelineRunning(true); setOutputs({ glb: null, svg: null }); setSvgContent(null); setPan({ x: 0, y: 0 }); setZoom(1);
     try {
-      const res = await fetch(`${API_BASE}/run-pipeline`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/run-pipeline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: jobId,
+          user_id: user?.id ?? 0,
+          material: matKey,
+          degradation_months: degMonth,
+        }),
+      });
       if (!res.ok) throw new Error('Failed to start pipeline');
     } catch (err) { setError(err.message); setPipelineRunning(false); }
   };
@@ -739,21 +863,57 @@ function Dashboard({ user, onLogout }) {
     } catch { window.open(url, '_blank'); }
   };
 
-  const renderGauge = () => {
-    let dynamicV = mat.v;
+  const handleSvgPointerDown = (event) => {
+    if (!outputs.svg) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsPanning(true);
+    setDragStart({ x: event.clientX, y: event.clientY, origX: pan.x, origY: pan.y });
+  };
+
+  const handleSvgPointerMove = (event) => {
+    if (!isPanning || !dragStart) return;
+    event.preventDefault();
+    const dx = event.clientX - dragStart.x;
+    const dy = event.clientY - dragStart.y;
+    setPan({ x: dragStart.origX + dx, y: dragStart.origY + dy });
+  };
+
+  const handleSvgPointerUp = (event) => {
+    if (!isPanning) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    setIsPanning(false);
+    setDragStart(null);
+  };
+
+  const handleFitView = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  useEffect(() => {
+    if (!outputs.svg) return;
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [outputs.svg]);
+
+  const renderGauge = (material = mat, degradation = degMonth) => {
+    const hasData = Boolean(selectedHistoryItem || file);
+    let dynamicV = hasData ? material.v : 0;
     if (outputs.svg && outputs.glb && file) {
       const cf = Math.min(20, file.size / (1024 * 1024) * 5);
       const sf = svgContent ? Math.min(30, svgContent.length / 50000 * 10) : 0;
       dynamicV = Math.max(10, Math.round(100 - cf - sf));
     }
-    const dynamicSS = Math.round((dynamicV * 0.55) + (mat.c * 0.25) + (mat.co * 0.20));
+    const dynamicSS = hasData ? Math.round((dynamicV * 0.55) + (material.c * 0.25) + (material.co * 0.20)) : 0;
     const circ = 214, offset = circ - (dynamicSS / 100) * circ;
     return (
       <div className="gauge-card">
         <div className="gauge-top">
           <div>
-            <div className="gauge-lbl" title="SDG 12 Alignment: Sₛ = α·Vol + β·Circ + γ·CO₂">Integrated Sustainability Score ⓘ</div>
-            <div className="gauge-sub">Sₛ = α·Vol + β·Circ + γ·CO₂</div>
+            <div className="gauge-lbl" title={hasData ? 'SDG 12 Alignment: Sₛ = α·Vol + β·Circ + γ·CO₂' : 'Upload a mesh to activate analytics'}>
+              {hasData ? 'Integrated Sustainability Score ⓘ' : 'Upload mesh to enable analytics'}
+            </div>
+            <div className="gauge-sub">{hasData ? 'Sₛ = α·Vol + β·Circ + γ·CO₂' : '0 values until a file is uploaded and processed'}</div>
           </div>
           <div className="gauge-score">{dynamicSS}<span>/100</span></div>
         </div>
@@ -768,8 +928,8 @@ function Dashboard({ user, onLogout }) {
         <div className="g-bars">
           {[
             { lbl: 'Volumetric', val: dynamicV, color: 'var(--g500)' },
-            { lbl: 'Circularity', val: mat.c, color: '#22d3ee' },
-            { lbl: 'CO₂ Index', val: mat.co, color: '#a78bfa' },
+            { lbl: 'Circularity', val: material.c, color: '#22d3ee' },
+            { lbl: 'CO₂ Index', val: material.co, color: '#a78bfa' },
           ].map(b => (
             <div key={b.lbl} className="g-bar-row">
               <span className="g-bar-lbl">{b.lbl}</span>
@@ -782,7 +942,40 @@ function Dashboard({ user, onLogout }) {
     );
   };
 
-  const initials = user.name.slice(0, 2).toUpperCase();
+  const selectedHistoryItem = filteredHistoryItems.find(i => i.id === selectedHistoryId) || filteredHistoryItems[0] || historyItems[0] || null;
+  const historyPreviewUrl = selectedHistoryItem?.svg_url || selectedHistoryItem?.glb_url || null;
+  const selectedMaterial = selectedHistoryItem?.material || selectedHistoryItem?.metadata?.material || 'Unknown';
+  const selectedDeg = selectedHistoryItem?.degradation_months ?? selectedHistoryItem?.metadata?.degradation_months ?? degMonth;
+  const selectedMetrics = selectedHistoryItem?.mesh_metrics || metricsData;
+  const activeMaterialKey = selectedHistoryItem?.material || matKey;
+  const activeMat = MATS[activeMaterialKey] || mat;
+  const activeDeg = selectedDeg;
+  const hasUploadedMesh = Boolean(file || jobId || selectedHistoryItem);
+  const analyticsData = {
+    co2: hasUploadedMesh ? activeMat.ann : 0,
+    efficiency: hasUploadedMesh ? activeMat.eff : 0,
+    avoided: hasUploadedMesh ? activeMat.void : 0,
+    lifecycle: hasUploadedMesh ? activeDeg : 0,
+  };
+  const safeName = user.name || user.email || 'User';
+  const initials = safeName.slice(0, 2).toUpperCase();
+
+  useEffect(() => {
+    if (!selectedHistoryItem || selectedHistoryItem.pipeline_result?.status !== 'done') {
+      setMetricsData(null);
+      return;
+    }
+
+    setMeasurementsLoading(true);
+    fetch(`${API_BASE}/mesh-metrics`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) setMetricsData(data);
+        else setMetricsData(null);
+      })
+      .catch(() => setMetricsData(null))
+      .finally(() => setMeasurementsLoading(false));
+  }, [selectedHistoryItem?.job_id, selectedHistoryItem?.pipeline_result?.status]);
 
   return (
     <div className="app">
@@ -797,6 +990,17 @@ function Dashboard({ user, onLogout }) {
             <div className="brand-sub">Generative Geometric Sustainability</div>
           </div>
         </div>
+        <div className="topbar-tabs">
+          {['workspace','history','analytics','measurements'].map(tab => (
+            <button
+              key={tab}
+              className={`tb-tab ${activeSection === tab ? 'active' : ''}`}
+              onClick={() => setActiveSection(tab)}
+            >
+              {tab === 'workspace' ? 'Workspace' : tab === 'history' ? 'History' : tab === 'analytics' ? 'Analytics' : 'Measurements'}
+            </button>
+          ))}
+        </div>
         <div className="topbar-right">
           <div className="status-pill"><div className="pulse" />Pipeline Active</div>
           <div className="tb-badge">v0.9.1-beta</div>
@@ -810,208 +1014,549 @@ function Dashboard({ user, onLogout }) {
 
       {/* Sidebar */}
       <div className="sidebar">
-        <div className="sb-section" style={{ marginTop: '15px' }}>
-          <div className="section-label">3D Mesh Input</div>
-          <div className="upload-zone"
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('drag'); }}
-            onDragLeave={e => e.currentTarget.classList.remove('drag')}
-            onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('drag'); if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]); }}>
-            <div className="upload-icon">
-              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        {activeSection === 'workspace' ? (
+          <>
+            <div className="sb-section" style={{ marginTop: '15px' }}>
+              <div className="section-label">3D Mesh Input</div>
+              <div className="upload-zone"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('drag'); }}
+                onDragLeave={e => e.currentTarget.classList.remove('drag')}
+                onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('drag'); if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]); }}>
+                <div className="upload-icon">
+                  <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <div className="upload-t">Drop mesh file here</div>
+                <div className="upload-s">or click to browse</div>
+                <div className="fmt-row">
+                  {['.STEP','.OBJ','.STL','.GLB'].map(f => <span key={f} className="fmt-tag">{f}</span>)}
+                </div>
+                <input ref={fileInputRef} type="file" accept=".obj,.stl,.step,.glb" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }} />
+                {uploadProgress > 0 && uploadProgress < 100 && (
+                  <div className="prog-wrap show">
+                    <div className="prog-bar"><div className="prog-fill" style={{ width: `${uploadProgress}%` }} /></div>
+                    <div className="prog-meta"><span>{fileName}</span><span>{Math.round(uploadProgress)}%</span></div>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="upload-t">Drop mesh file here</div>
-            <div className="upload-s">or click to browse</div>
-            <div className="fmt-row">
-              {['.STEP','.OBJ','.STL','.GLB'].map(f => <span key={f} className="fmt-tag">{f}</span>)}
+
+            <div className="sb-section" style={{ marginTop: '14px' }}>
+              <div className="section-label">Material Profile</div>
+              <div className="sel-wrap">
+                <select value={matKey} onChange={e => setMatKey(e.target.value)}>
+                  <option value="mycelium">Agricultural Mycelium</option>
+                  <option value="cardboard">Corrugated Cardboard</option>
+                  <option value="kraft">Recycled Kraft Fibers</option>
+                </select>
+              </div>
+              <div className="mat-badge">
+                <div className="mat-dot" style={{ background: mat.dot }} />
+                <div><div className="mat-label">{mat.lbl}</div><div className="mat-desc">{mat.desc}</div></div>
+              </div>
             </div>
-            <input ref={fileInputRef} type="file" accept=".obj,.stl,.step,.glb" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]); }} />
-            {uploadProgress > 0 && uploadProgress < 100 && (
-              <div className="prog-wrap show">
-                <div className="prog-bar"><div className="prog-fill" style={{ width: `${uploadProgress}%` }} /></div>
-                <div className="prog-meta"><span>{fileName}</span><span>{Math.round(uploadProgress)}%</span></div>
+
+            <div className="sb-section" style={{ marginTop: '14px' }}>
+              <div className="section-label">Degradation Timeline</div>
+              <div className="slider-header">
+                <span className="slider-title">Material Degradation Timeline</span>
+                <span className="slider-val">{degMonth} mo</span>
+              </div>
+              <input type="range" className="sl" min="0" max="24" step="1" value={degMonth}
+                onChange={e => setDegMonth(e.target.value)}
+                style={{ background: `linear-gradient(to right,var(--g500) 0%,var(--g500) ${(degMonth/24)*100}%,var(--s200) ${(degMonth/24)*100}%,var(--s200) 100%)` }} />
+              <div className="ticks">{['0','6','12','18','24 mo'].map(t => <span key={t}>{t}</span>)}</div>
+              <div className="deg-bar"><div className="deg-fill" style={{ width: `${(degMonth/24)*100}%` }} /></div>
+              <div className="deg-lbs">
+                <span style={{ color: 'var(--g600)' }}>Fresh</span>
+                <span style={{ color: '#eab308' }}>Breaking</span>
+                <span style={{ color: '#f97316' }}>Composting</span>
+              </div>
+            </div>
+
+            {file && (
+              <div className="pipeline-box">
+                <div className="section-label" style={{ marginBottom: '10px' }}>Pipeline Status</div>
+                {[
+                  { label: 'Mesh import & validation', done: true, running: false },
+                  { label: 'Convex hull generation', done: !!outputs.glb, running: pipelineRunning },
+                  { label: 'SVG dieline export', done: !!outputs.svg, running: pipelineRunning },
+                ].map((row, i) => (
+                  <div key={i} className="pipeline-row">
+                    <div className="pipe-ic" style={{ background: row.done ? 'var(--g100)' : row.running ? '#fef9c3' : 'var(--s100)' }}>
+                      {row.done ? '✓' : row.running ? '◐' : '○'}
+                    </div>
+                    <span className="pipe-txt">{row.label}</span>
+                    <span className={`pipe-state ${row.done ? 'st-done' : row.running ? 'st-run' : 'st-wait'}`}>
+                      {row.done ? 'done' : row.running ? 'running' : 'queued'}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
-          </div>
-        </div>
-
-        <div className="sb-section" style={{ marginTop: '14px' }}>
-          <div className="section-label">Material Profile</div>
-          <div className="sel-wrap">
-            <select value={matKey} onChange={e => setMatKey(e.target.value)}>
-              <option value="mycelium">Agricultural Mycelium</option>
-              <option value="cardboard">Corrugated Cardboard</option>
-              <option value="kraft">Recycled Kraft Fibers</option>
-            </select>
-          </div>
-          <div className="mat-badge">
-            <div className="mat-dot" style={{ background: mat.dot }} />
-            <div><div className="mat-label">{mat.lbl}</div><div className="mat-desc">{mat.desc}</div></div>
-          </div>
-        </div>
-
-        <div className="sb-section" style={{ marginTop: '14px' }}>
-          <div className="section-label">Degradation Timeline</div>
-          <div className="slider-header">
-            <span className="slider-title">Material Degradation Timeline</span>
-            <span className="slider-val">{degMonth} mo</span>
-          </div>
-          <input type="range" className="sl" min="0" max="24" step="1" value={degMonth}
-            onChange={e => setDegMonth(e.target.value)}
-            style={{ background: `linear-gradient(to right,var(--g500) 0%,var(--g500) ${(degMonth/24)*100}%,var(--s200) ${(degMonth/24)*100}%,var(--s200) 100%)` }} />
-          <div className="ticks">{['0','6','12','18','24 mo'].map(t => <span key={t}>{t}</span>)}</div>
-          <div className="deg-bar"><div className="deg-fill" style={{ width: `${(degMonth/24)*100}%` }} /></div>
-          <div className="deg-lbs">
-            <span style={{ color: 'var(--g600)' }}>Fresh</span>
-            <span style={{ color: '#eab308' }}>Breaking</span>
-            <span style={{ color: '#f97316' }}>Composting</span>
-          </div>
-        </div>
-
-        {file && (
-          <div className="pipeline-box">
-            <div className="section-label" style={{ marginBottom: '10px' }}>Pipeline Status</div>
-            {[
-              { label: 'Mesh import & validation', done: true, running: false },
-              { label: 'Convex hull generation', done: !!outputs.glb, running: pipelineRunning },
-              { label: 'SVG dieline export', done: !!outputs.svg, running: pipelineRunning },
-            ].map((row, i) => (
-              <div key={i} className="pipeline-row">
-                <div className="pipe-ic" style={{ background: row.done ? 'var(--g100)' : row.running ? '#fef9c3' : 'var(--s100)' }}>
-                  {row.done ? '✓' : row.running ? '◐' : '○'}
-                </div>
-                <span className="pipe-txt">{row.label}</span>
-                <span className={`pipe-state ${row.done ? 'st-done' : row.running ? 'st-run' : 'st-wait'}`}>
-                  {row.done ? 'done' : row.running ? 'running' : 'queued'}
-                </span>
+          </>
+        ) : activeSection === 'history' ? (
+          <>
+            <div className="sb-section" style={{ marginTop: '15px' }}>
+              <div className="section-label">History filters</div>
+              <div className="sel-wrap">
+                <select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)}>
+                  <option value="all">All materials</option>
+                  <option value="mycelium">Agricultural Mycelium</option>
+                  <option value="cardboard">Corrugated Cardboard</option>
+                  <option value="kraft">Recycled Kraft Fibers</option>
+                </select>
               </div>
-            ))}
+            </div>
+            <div className="sb-section" style={{ marginTop: '14px' }}>
+              <div className="section-label">Upload history</div>
+              {historyLoading ? (
+                <div style={{ padding: '18px', color: 'var(--s500)' }}>Loading history…</div>
+              ) : filteredHistoryItems.length === 0 ? (
+                <div style={{ padding: '18px', color: 'var(--s400)' }}>No upload history matching this filter.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {filteredHistoryItems.map(item => (
+                    <button key={item.id} className="pipe-row" style={{ textAlign: 'left', width: '100%', background: activeSection === 'history' && selectedHistoryId === item.id ? 'var(--s50)' : 'transparent', border: '1px solid var(--s200)', padding: '12px', borderRadius: '12px', cursor: 'pointer' }} onClick={() => setSelectedHistoryId(item.id)}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' }}>
+                        <div style={{ fontSize: '12px', color: 'var(--s700)', fontWeight: 600 }}>{item.file_name || 'Untitled upload'}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--s500)' }}>{item.created_at?.slice(0, 10) || 'unknown'}</div>
+                      </div>
+                      <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--s500)' }}>{item.material || 'material unknown'} · {item.degradation_months} mo</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="sb-section" style={{ marginTop: '15px' }}>
+            <div className="section-label">Analytics overview</div>
+            <div className="metric-grid" style={{ gridTemplateColumns: '1fr', gap: '10px' }}>
+              {[
+                { lbl: 'Annual CO₂ impact', value: `${activeMat.ann.toFixed(1)} t`, note: 'Estimated fleet reduction' },
+                { lbl: 'Void fill reduction', value: `${activeMat.void.toFixed(2)} m³`, note: 'Per optimized unit' },
+                { lbl: 'Shipment efficiency', value: `+${activeMat.eff}%`, note: 'Projected packaging savings' },
+              ].map((item, idx) => (
+                <div key={idx} className="mc" style={{ borderLeftColor: 'var(--g500)', padding: '14px', borderRadius: '12px', border: '1px solid var(--s200)' }}>
+                  <div className="mc-lbl">{item.lbl}</div>
+                  <div className="mc-val" style={{ color: 'var(--s900)', fontSize: '24px', margin: '10px 0 6px' }}>{item.value}</div>
+                  <div className="mc-unit" style={{ color: 'var(--s500)', fontSize: '12px' }}>{item.note}</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
 
       {/* Viewport */}
       <div className="viewport">
-        <div className="vp-header">
-          <div className="vp-tabs">
-            <button className={`vp-tab ${activeTab === '3d' ? 'active' : ''}`} onClick={() => setActiveTab('3d')}>3D Mesh</button>
-            <button className={`vp-tab ${activeTab === 'dieline' ? 'active' : ''}`} onClick={() => setActiveTab('dieline')}>Dieline</button>
-          </div>
-          <div className="vp-actions">
-            {activeTab === 'dieline' && outputs.svg && <button className="act-btn" onClick={() => downloadAsset(outputs.svg,'dieline_pattern.svg')}><span>↓</span> Download SVG</button>}
-            {activeTab === '3d' && outputs.glb && <button className="act-btn" onClick={() => downloadAsset(outputs.glb,'preview.glb')}><span>↓</span> Download GLB</button>}
-            <button className="act-btn primary" onClick={runPipeline} disabled={pipelineRunning || !file}>
-              {pipelineRunning ? 'Processing…' : '▶ Run Pipeline'}
-            </button>
-          </div>
-        </div>
+        {activeSection === 'workspace' ? (
+          <>
+            <div className="vp-header">
+              <div className="vp-tabs">
+                <button className={`vp-tab ${activeTab === '3d' ? 'active' : ''}`} onClick={() => setActiveTab('3d')}>3D Mesh</button>
+                <button className={`vp-tab ${activeTab === 'dieline' ? 'active' : ''}`} onClick={() => setActiveTab('dieline')}>Dieline</button>
+              </div>
+              <div className="vp-actions">
+                {activeTab === 'dieline' && outputs.svg && <button className="act-btn" onClick={() => downloadAsset(outputs.svg,'dieline_pattern.svg')}><span>↓</span> Download SVG</button>}
+                {activeTab === '3d' && outputs.glb && <button className="act-btn" onClick={() => downloadAsset(outputs.glb,'preview.glb')}><span>↓</span> Download GLB</button>}
+                <button className="act-btn primary" onClick={runPipeline} disabled={pipelineRunning || !file}>
+                  {pipelineRunning ? 'Processing…' : '▶ Run Pipeline'}
+                </button>
+              </div>
+            </div>
 
-        <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {activeTab === '3d' && (
-            <div style={{ flex: 1, display: 'flex', position: 'relative' }}>
-              {outputs.glb ? (
-                <model-viewer src={outputs.glb} camera-controls auto-rotate touch-action="pan-y" shadow-intensity="1" style={{ width: '100%', height: '100%', background: '#f8fafc' }} />
-              ) : (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--s400)' }}>
-                  {pipelineRunning ? 'Generating 3D Preview…' : 'Upload a file and Run Pipeline'}
+            <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {activeTab === '3d' && (
+                <div style={{ flex: 1, display: 'flex', position: 'relative' }}>
+                  {outputs.glb ? (
+                    <model-viewer src={outputs.glb} camera-controls auto-rotate touch-action="pan-y" shadow-intensity="1" style={{ width: '100%', height: '100%', background: '#f8fafc' }} />
+                  ) : (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--s400)' }}>
+                      {pipelineRunning ? 'Generating 3D Preview…' : 'Upload a file and Run Pipeline'}
+                    </div>
+                  )}
+                  {outputs.glb && <>
+                    <div className="mesh-badge" style={{ color: 'var(--g700)', background: 'var(--g50)', borderColor: 'var(--g200)' }}>● READY</div>
+                    <div className="mesh-label">{fileName} · Preview available</div>
+                    <div className="mesh-ctrls">{['+','⊙','−'].map(c => <div key={c} className="mc-btn">{c}</div>)}</div>
+                  </>}
+                  {pipelineRunning && <div className="mesh-badge proc">● PROCESSING</div>}
                 </div>
               )}
-              {outputs.glb && <>
-                <div className="mesh-badge" style={{ color: 'var(--g700)', background: 'var(--g50)', borderColor: 'var(--g200)' }}>● READY</div>
-                <div className="mesh-label">{fileName} · Preview available</div>
-                <div className="mesh-ctrls">{['+','⊙','−'].map(c => <div key={c} className="mc-btn">{c}</div>)}</div>
-              </>}
-              {pipelineRunning && <div className="mesh-badge proc">● PROCESSING</div>}
-            </div>
-          )}
-          {activeTab === 'dieline' && (
-            <div className="dieline-workspace" ref={dielineRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--white)' }}>
-              {outputs.svg ? (
-                <>
-                  <div className="zoom-controls">
-                    <span className="badge">1 PAGE</span>
-                    <button onClick={() => setZoom(z => Math.max(0.1, z - 0.25))}>−</button>
-                    <span>{Math.round(zoom * 100)}%</span>
-                    <button onClick={() => setZoom(z => z + 0.25)}>+</button>
-                    <button onClick={() => setZoom(1)} className="fit-btn">FIT</button>
-                    <button onClick={toggleFullScreen}>⛶ Full</button>
-                    <span className="divider">|</span>
-                    <span className="legend-cut" /> Cut line
-                  </div>
-                  <div className="svg-container">
-                    <div className="svg-wrapper" style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }} dangerouslySetInnerHTML={{ __html: svgContent }} />
-                  </div>
-                </>
-              ) : (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--s400)' }}>
-                  {pipelineRunning ? 'Generating Dieline Pattern…' : 'Run Pipeline to generate 2D dieline'}
+              {activeTab === 'dieline' && (
+                <div className="dieline-workspace" ref={dielineRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--white)' }}>
+                  {outputs.svg ? (
+                    <>
+                      <div className="zoom-controls">
+                        <span className="badge">1 PAGE</span>
+                        <button onClick={() => setZoom(z => Math.max(0.1, z - 0.25))}>−</button>
+                        <span>{Math.round(zoom * 100)}%</span>
+                        <button onClick={() => setZoom(z => z + 0.25)}>+</button>
+                        <button onClick={handleFitView} className="fit-btn">FIT</button>
+                        <button onClick={toggleFullScreen}>⛶ Full</button>
+                        <span className="divider">|</span>
+                        <span className="legend-cut" /> Cut line
+                      </div>
+                      <div className="svg-container">
+                        <div
+                          ref={svgWrapperRef}
+                          className="svg-wrapper"
+                          style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center' }}
+                          onPointerDown={handleSvgPointerDown}
+                          onPointerMove={handleSvgPointerMove}
+                          onPointerUp={handleSvgPointerUp}
+                          onPointerLeave={handleSvgPointerUp}
+                          onPointerCancel={handleSvgPointerUp}
+                          dangerouslySetInnerHTML={{ __html: svgContent }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--s400)' }}>
+                      {pipelineRunning ? 'Generating Dieline Pattern…' : 'Run Pipeline to generate 2D dieline'}
+                    </div>
+                  )}
+                </div>
+              )}
+              {error && (
+                <div style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', background: '#fee2e2', color: '#991b1b', padding: '12px 24px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,.1)', border: '1px solid #fecaca', zIndex: 50 }}>
+                  ⚠️ {error}
                 </div>
               )}
             </div>
-          )}
-          {error && (
-            <div style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', background: '#fee2e2', color: '#991b1b', padding: '12px 24px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,.1)', border: '1px solid #fecaca', zIndex: 50 }}>
-              ⚠️ {error}
-            </div>
-          )}
-        </div>
 
-        <div style={{ height: '36px', background: 'var(--white)', borderTop: '1px solid var(--s200)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: '16px', fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--s500)' }}>
-          <div>{pipelineRunning ? 'Starting Blender pipeline…' : 'Idle'}</div>
-          {outputs.glb && <button onClick={() => downloadAsset(outputs.glb,'preview.glb')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--s600)' }}>Download GLB</button>}
-          {outputs.svg && <button onClick={() => downloadAsset(outputs.svg,'dieline_pattern.svg')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--s600)' }}>Download SVG</button>}
-        </div>
+            <div style={{ height: '36px', background: 'var(--white)', borderTop: '1px solid var(--s200)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: '16px', fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--s500)' }}>
+              <div>{pipelineRunning ? 'Starting Blender pipeline…' : 'Idle'}</div>
+              {outputs.glb && <button onClick={() => downloadAsset(outputs.glb,'preview.glb')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--s600)' }}>Download GLB</button>}
+              {outputs.svg && <button onClick={() => downloadAsset(outputs.svg,'dieline_pattern.svg')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--s600)' }}>Download SVG</button>}
+            </div>
+          </>
+        ) : activeSection === 'history' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div className="vp-header">
+              <div className="vp-tabs">
+                <button className="vp-tab active">History Viewer</button>
+              </div>
+              <div className="vp-actions">
+                <button className="act-btn" onClick={() => setActiveSection('workspace')}>Return to Workspace</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+              <div style={{ width: '320px', borderRight: '1px solid var(--s200)', padding: '18px', overflowY: 'auto' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--s500)', marginBottom: '12px' }}>Recent uploads</div>
+                {historyLoading ? (
+                  <div style={{ color: 'var(--s400)' }}>Loading uploads…</div>
+                ) : historyItems.length === 0 ? (
+                  <div style={{ color: 'var(--s400)' }}>No history available yet.</div>
+                ) : (
+                  historyItems.map(item => (
+                    <button key={item.id} onClick={() => setSelectedHistoryId(item.id)} style={{ width: '100%', textAlign: 'left', padding: '12px', borderRadius: '12px', border: selectedHistoryId === item.id ? '1px solid var(--g500)' : '1px solid var(--s200)', background: selectedHistoryId === item.id ? 'var(--s50)' : 'transparent', marginBottom: '10px', cursor: 'pointer' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--s800)' }}>{item.file_name || 'Unnamed asset'}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--s500)', marginTop: '4px' }}>{item.created_at?.slice(0, 10) || 'unknown'}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--s500)', marginTop: '8px' }}>{item.material || 'Unknown material'} · {item.degradation_months} mo</div>
+                    </button>
+                  ))
+                )}
+              </div>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: '18px' }}>
+                {selectedHistoryItem ? (
+                  historyPreviewUrl ? (
+                    selectedHistoryItem.pipeline_result?.glb_url ? (
+                      <model-viewer src={`${API_BASE.replace('/api','')}${selectedHistoryItem.pipeline_result.glb_url}`} camera-controls auto-rotate style={{ width: '100%', height: '100%', minHeight: '420px' }} />
+                    ) : (
+                      <img src={`${API_BASE.replace('/api','')}${historyPreviewUrl}`} alt="History preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                    )
+                  ) : (
+                    <div style={{ color: 'var(--s500)' }}>No preview available for this entry.</div>
+                  )
+                ) : (
+                  <div style={{ color: 'var(--s500)' }}>Select an upload from the left to preview details.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : activeSection === 'analytics' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px', gap: '20px' }}>
+            <div className="vp-header">
+              <div className="vp-tabs">
+                <button className="vp-tab active">Analytics</button>
+              </div>
+              <div className="vp-actions">
+                <button className="act-btn" onClick={() => setActiveSection('workspace')}>Go to Workspace</button>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', flex: 1, overflow: 'auto' }}>
+              {[
+                { title: 'Estimated CO₂ Savings', value: `${analyticsData.co2.toFixed(1)} t/yr`, note: hasUploadedMesh ? 'Modeled from current material selection' : 'Upload a mesh to populate analytics' },
+                { title: 'Efficiency Gain', value: `${analyticsData.efficiency.toFixed(1)}%`, note: hasUploadedMesh ? 'Packaging optimization uplift' : 'Upload a mesh to populate analytics' },
+                { title: 'Material Impact Score', value: `${hasUploadedMesh ? Math.round((activeMat.c + activeMat.co + activeMat.v) / 3 * 1.2) : 0} / 100`, note: hasUploadedMesh ? 'Relative sustainability index' : 'Upload a mesh to populate analytics' },
+                { title: 'Lifecycle Duration', value: `${analyticsData.lifecycle} mo`, note: hasUploadedMesh ? 'Degradation window selected' : 'Upload a mesh to populate analytics' },
+              ].map((card, idx) => (
+                <div key={idx} className="mc" style={{ borderLeftColor: 'var(--g500)', padding: '18px', borderRadius: '14px', border: '1px solid var(--s200)' }}>
+                  <div className="mc-lbl">{card.title}</div>
+                  <div className="mc-val" style={{ fontSize: '24px', margin: '12px 0', color: 'var(--s900)' }}>{card.value}</div>
+                  <div className="mc-unit" style={{ color: 'var(--s500)' }}>{card.note}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : activeSection === 'measurements' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div className="vp-header">
+              <div className="vp-tabs">
+                <button className="vp-tab active">Measurement Review</button>
+              </div>
+              <div className="vp-actions">
+                <button className="act-btn" onClick={() => setActiveSection('workspace')}>Back to Workspace</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', overflowY: 'auto', padding: '18px', borderRight: '1px solid var(--s200)', background: 'var(--s50)' }}>
+                <div className="mc" style={{ borderLeftColor: 'var(--g600)', padding: '18px', borderRadius: '14px', border: '1px solid var(--s200)' }}>
+                  <div className="mc-lbl">Selected Upload</div>
+                  <div className="mc-val" style={{ fontSize: '22px', margin: '12px 0', color: 'var(--s900)' }}>{selectedHistoryItem?.file_name || 'No upload selected'}</div>
+                  <div className="mc-unit">Material: {selectedMaterial} · Degradation: {selectedDeg} mo</div>
+                </div>
+                <div className="measurement-grid">
+                  {[
+                    { key: 'Estimated width', value: selectedMetrics?.width?.toFixed(1) || 'N/A', unit: 'mm' },
+                    { key: 'Estimated height', value: selectedMetrics?.height?.toFixed(1) || 'N/A', unit: 'mm' },
+                    { key: 'Estimated area', value: selectedMetrics?.area?.toFixed(1) || 'N/A', unit: 'cm²' },
+                    { key: 'Fold line length', value: selectedMetrics?.fold_line_length?.toFixed(1) || 'N/A', unit: 'mm' },
+                  ].map(m => (
+                    <div key={m.key} className="measurement-card">
+                      <div className="measurement-key">{m.key}</div>
+                      <div className="measurement-value">{m.value} <span>{m.unit}</span></div>
+                    </div>
+                  ))}
+                </div>
+                <div className="pbi-card" style={{ padding: '18px' }}>
+                  <div className="pbi-hd">
+                    <div className="pbi-ttl">
+                      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                      Measurement Intelligence
+                    </div>
+                    <span className="pbi-badge">DETAIL</span>
+                  </div>
+                  <div className="pbi-body" style={{ display: 'grid', gap: '12px' }}>
+                    <div className="pbi-stat"><div className="pbi-sv">{measurementsLoading ? 'Loading…' : selectedMetrics ? 'OK' : 'Pending'}</div><div className="pbi-sl">Metrics status</div></div>
+                    <div className="pbi-stat"><div className="pbi-sv">{selectedHistoryItem?.status || 'pending'}</div><div className="pbi-sl">Pipeline state</div></div>
+                    <div className="pbi-stat"><div className="pbi-sv">{selectedHistoryItem?.svg_url ? 'SVG ready' : 'SVG unavailable'}</div><div className="pbi-sl">Dieline output</div></div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', overflowY: 'auto', padding: '18px' }}>
+                <div className="chart-board" style={{ minHeight: '340px' }}>
+                  <div className="chart-header">Dieline Measurement Trend</div>
+                  <div className="line-chart">
+                    <div className="line-path" />
+                    {[0, 1, 2, 3, 4, 5].map((idx) => {
+                      const val = 40 + idx * 9 + (selectedDeg * 0.8);
+                      return <span key={idx} className="line-point" style={{ bottom: `${Math.min(92, val)}%` }} />;
+                    })}
+                  </div>
+                  <div className="chart-lbs" style={{ justifyContent: 'space-between' }}>
+                    {['W','X','Y','Z','A','B'].map(letter => <span key={letter}>{letter}</span>)}
+                  </div>
+                </div>
+                <div className="chart-board" style={{ minHeight: '260px' }}>
+                  <div className="chart-header">Material Distribution</div>
+                  <div className="pie-graph">
+                    {['Mycelium','Cardboard','Kraft'].map((label, idx) => (
+                      <span key={label} className="pie-slice" style={{ transform: `rotate(${idx===0?0:idx===1?120:220}deg)`, background: idx===0 ? 'var(--g500)' : idx===1 ? '#22d3ee' : '#a78bfa' }} />
+                    ))}
+                  </div>
+                  <div className="chart-key">
+                    {['Mycelium', 'Cardboard', 'Kraft'].map((label, idx) => (
+                      <div key={label} className="chart-pill" style={{ background: idx===0 ? 'var(--g100)' : idx===1 ? 'rgba(34,211,238,.12)' : 'rgba(167,139,250,.12)', color: idx===0 ? 'var(--g700)' : idx===1 ? '#0f766e' : '#5b21b6' }}>{label}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Analytics */}
       <div className="analytics">
-        <div className="an-section" style={{ marginTop: '15px' }}>
-          <div className="an-title">Fleet Telemetry &amp;<br/>Carbon Ripple Tracking</div>
-          <div className="an-sub">Azure Cosmos DB · Power BI · Live sync</div>
-        </div>
-        {renderGauge()}
-        <div className="metric-grid">
-          {[
-            { lbl: 'Void Fill Volume Eliminated', val: mat.void.toFixed(2), unit: 'cubic metres · per unit', trend: '↑ 23% vs standard box', bc: 'var(--g400)' },
-            { lbl: 'Container Efficiency Boost', val: `+${mat.eff}%`, unit: 'fleet-wide improvement', trend: '↑ cube utilisation', color: 'var(--g700)', bc: 'var(--g300)' },
-            { lbl: 'CO₂ Saved per Shipment', val: mat.co2.toFixed(2), unit: 'kg CO₂ per dispatch', trend: '↑ Li & Wang 2026', bc: '#22d3ee' },
-            { lbl: 'Carbon Ripple · Annual', val: mat.ann.toFixed(1), unit: 'tonnes CO₂ · 500/mo fleet', trend: '↑ SDG 12 + 13 aligned', bc: '#a78bfa' },
-          ].map((m, i) => (
-            <div key={i} className="mc" style={{ borderLeftColor: m.bc }}>
-              <div className="mc-lbl">{m.lbl}</div>
-              <div className="mc-val" style={{ color: m.color || 'var(--s900)' }}>{m.val}</div>
-              <div className="mc-unit">{m.unit}</div>
-              <div className="mc-trend">{m.trend}</div>
+        {activeSection === 'workspace' ? (
+          <>
+            <div className="an-section" style={{ marginTop: '15px' }}>
+              <div className="an-title">Fleet Telemetry &amp;<br/>Carbon Ripple Tracking</div>
+              <div className="an-sub">Azure Postgres · Supabase · Live sync</div>
             </div>
-          ))}
-        </div>
-        <div className="pbi-card">
-          <div className="pbi-hd">
-            <div className="pbi-ttl">
-              <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-              Microsoft Power BI — Carbon Ripple
-            </div>
-            <span className="pbi-badge">EMBED SLOT</span>
-          </div>
-          <div className="pbi-body">
-            <div className="mini-chart">
-              {[28,35,41,38,52,67,61].map((v,i) => <div key={i} className={`bar ${i===6?'hl':''}`} style={{ height: `${(v/88)*48}px` }} />)}
-            </div>
-            <div className="chart-lbs">
-              {['J','F','M','A','M','J','J'].map((m,i) => <span key={i}>{m}</span>)}
-            </div>
-            <div className="pbi-stats">
-              {[['6,200','Fleet shipments'],['2.1t','CO₂ avoided'],['A+','ESG grade']].map(([v,l]) => (
-                <div key={l} className="pbi-stat"><div className="pbi-sv">{v}</div><div className="pbi-sl">{l}</div></div>
+            {renderGauge()}
+            <div className="metric-grid">
+              {[
+                { lbl: 'Void Fill Volume Eliminated', val: activeMat.void.toFixed(2), unit: 'cubic metres · per unit', trend: '↑ 23% vs standard box', bc: 'var(--g400)' },
+                { lbl: 'Container Efficiency Boost', val: `+${activeMat.eff}%`, unit: 'fleet-wide improvement', trend: '↑ cube utilisation', color: 'var(--g700)', bc: 'var(--g300)' },
+                { lbl: 'CO₂ Saved per Shipment', val: activeMat.co2.toFixed(2), unit: 'kg CO₂ per dispatch', trend: '↑ Li & Wang 2026', bc: '#22d3ee' },
+                { lbl: 'Carbon Ripple · Annual', val: activeMat.ann.toFixed(1), unit: 'tonnes CO₂ · 500/mo fleet', trend: '↑ SDG 12 + 13 aligned', bc: '#a78bfa' },
+              ].map((m, i) => (
+                <div key={i} className="mc" style={{ borderLeftColor: m.bc }}>
+                  <div className="mc-lbl">{m.lbl}</div>
+                  <div className="mc-val" style={{ color: m.color || 'var(--s900)' }}>{m.val}</div>
+                  <div className="mc-unit">{m.unit}</div>
+                  <div className="mc-trend">{m.trend}</div>
+                </div>
               ))}
             </div>
-          </div>
-        </div>
-        <div className="sdg-row">
-          <span className="sdg-tag" style={{ color: 'var(--g800)', background: 'var(--g50)', border: '1px solid var(--g200)' }}>SDG 12 · Responsible Consumption</span>
-          <span className="sdg-tag" style={{ color: 'var(--g800)', background: 'var(--g50)', border: '1px solid var(--g200)' }}>SDG 13 · Climate Action</span>
-          <span className="sdg-tag" style={{ color: '#1d4ed8', background: '#eff6ff', border: '1px solid #bfdbfe' }}>SDG 9 · Innovation</span>
-        </div>
+            <div className="pbi-card">
+              <div className="pbi-hd">
+                <div className="pbi-ttl">
+                  <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  Microsoft Power BI — Carbon Ripple
+                </div>
+                <span className="pbi-badge">EMBED SLOT</span>
+              </div>
+              <div className="pbi-body">
+                <div className="mini-chart">
+                  {[28,35,41,38,52,67,61].map((v,i) => <div key={i} className={`bar ${i===6?'hl':''}`} style={{ height: `${(v/88)*48}px` }} />)}
+                </div>
+                <div className="chart-lbs">
+                  {['J','F','M','A','M','J','J'].map((m,i) => <span key={i}>{m}</span>)}
+                </div>
+                <div className="pbi-stats">
+                  {[['6,200','Fleet shipments'],['2.1t','CO₂ avoided'],['A+','ESG grade']].map(([v,l]) => (
+                    <div key={l} className="pbi-stat"><div className="pbi-sv">{v}</div><div className="pbi-sl">{l}</div></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="sdg-row">
+              <span className="sdg-tag" style={{ color: 'var(--g800)', background: 'var(--g50)', border: '1px solid var(--g200)' }}>SDG 12 · Responsible Consumption</span>
+              <span className="sdg-tag" style={{ color: 'var(--g800)', background: 'var(--g50)', border: '1px solid var(--g200)' }}>SDG 13 · Climate Action</span>
+              <span className="sdg-tag" style={{ color: '#1d4ed8', background: '#eff6ff', border: '1px solid #bfdbfe' }}>SDG 9 · Innovation</span>
+            </div>
+          </>
+        ) : activeSection === 'history' ? (
+          <>
+            <div className="an-section" style={{ marginTop: '15px' }}>
+              <div className="an-title">History Insights</div>
+              <div className="an-sub">Review selected upload metadata and pipeline results</div>
+            </div>
+            {selectedHistoryItem ? (
+              <>
+                <div className="metric-grid">
+                  {[
+                    { lbl: 'Upload name', val: selectedHistoryItem.file_name || 'Unnamed' },
+                    { lbl: 'Material', val: selectedHistoryItem.material || 'Unknown' },
+                    { lbl: 'Degradation window', val: `${selectedHistoryItem.degradation_months || 0} mo` },
+                    { lbl: 'Processed at', val: selectedHistoryItem.created_at?.slice(0, 16) || 'n/a' },
+                  ].map((item, idx) => (
+                    <div key={idx} className="mc" style={{ borderLeftColor: 'var(--g500)' }}>
+                      <div className="mc-lbl">{item.lbl}</div>
+                      <div className="mc-val" style={{ color: 'var(--s900)' }}>{item.val}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="pbi-card">
+                  <div className="pbi-hd">
+                    <div className="pbi-ttl">
+                      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                      Uploaded Asset Profile
+                    </div>
+                    <span className="pbi-badge">DETAILS</span>
+                  </div>
+                  <div className="pbi-body" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+                    <div className="pbi-stat"><div className="pbi-sv">{selectedHistoryItem.pipeline_result?.status || 'pending'}</div><div className="pbi-sl">Pipeline status</div></div>
+                    <div className="pbi-stat"><div className="pbi-sv">{selectedHistoryItem.pipeline_result?.svg_url ? 'SVG ready' : 'SVG missing'}</div><div className="pbi-sl">Dieline export</div></div>
+                    <div className="pbi-stat"><div className="pbi-sv">{selectedHistoryItem.pipeline_result?.glb_url ? '3D preview ready' : '3D missing'}</div><div className="pbi-sl">Model output</div></div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ padding: '22px', color: 'var(--s500)' }}>Select a history entry to view analytics and detailed metadata.</div>
+            )}
+          </>
+        ) : activeSection === 'analytics' ? (
+          <>
+            <div className="an-section" style={{ marginTop: '15px' }}>
+              <div className="an-title">Executive Analytics</div>
+              <div className="an-sub">Cross-user sustainability, deployment and impact metrics</div>
+            </div>
+            {renderGauge()}
+            <div className="metric-grid">
+              {[
+                { lbl: 'Estimated CO₂ Savings', val: `${analyticsData.co2.toFixed(1)} t/yr`, unit: hasUploadedMesh ? 'converted from selection' : 'no asset yet', bc: 'var(--g400)' },
+                { lbl: 'Packaging Efficiency', val: `+${analyticsData.efficiency.toFixed(1)}%`, unit: hasUploadedMesh ? 'fleet-wide uplift' : 'no asset yet', bc: 'var(--g300)' },
+                { lbl: 'Waste Avoidance', val: `${analyticsData.avoided.toFixed(2)} m³`, unit: hasUploadedMesh ? 'per unit optimized' : 'no asset yet', bc: '#22d3ee' },
+                { lbl: 'Lifecycle Durability', val: `${analyticsData.lifecycle} mo`, unit: hasUploadedMesh ? 'projected degradation window' : 'no asset yet', bc: '#a78bfa' },
+              ].map((m, idx) => (
+                <div key={idx} className="mc" style={{ borderLeftColor: m.bc }}>
+                  <div className="mc-lbl">{m.lbl}</div>
+                  <div className="mc-val" style={{ color: 'var(--s900)' }}>{m.val}</div>
+                  <div className="mc-unit">{m.unit}</div>
+                </div>
+              ))}
+            </div>
+            <div className="pbi-card">
+              <div className="pbi-hd">
+                <div className="pbi-ttl">
+                  <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  Carbon Intelligence Dashboard
+                </div>
+                <span className="pbi-badge">LIVE</span>
+              </div>
+              <div className="pbi-body">
+                <div className="mini-chart">
+                  {[32,44,40,47,55,63,72].map((v,i) => <div key={i} className={`bar ${i===6?'hl':''}`} style={{ height: `${(v/88)*48}px` }} />)}
+                </div>
+                <div className="chart-lbs">
+                  {['J','F','M','A','M','J','J'].map((m,i) => <span key={i}>{m}</span>)}
+                </div>
+                <div className="pbi-stats">
+                  {[['7,400','Projected shipments'],['2.8t','CO₂ reduced'],['A+','ESG projection']].map(([v,l]) => (
+                    <div key={l} className="pbi-stat"><div className="pbi-sv">{v}</div><div className="pbi-sl">{l}</div></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="sdg-row">
+              <span className="sdg-tag" style={{ color: 'var(--g800)', background: 'var(--g50)', border: '1px solid var(--g200)' }}>SDG 12 · Responsible Consumption</span>
+              <span className="sdg-tag" style={{ color: 'var(--g800)', background: 'var(--g50)', border: '1px solid var(--g200)' }}>SDG 13 · Climate Action</span>
+              <span className="sdg-tag" style={{ color: '#1d4ed8', background: '#eff6ff', border: '1px solid #bfdbfe' }}>SDG 9 · Innovation</span>
+            </div>
+          </>
+        ) : activeSection === 'measurements' ? (
+          <>
+            <div className="an-section" style={{ marginTop: '15px' }}>
+              <div className="an-title">Dieline Measurement Data</div>
+              <div className="an-sub">Estimated dieline dimensions and output metrics</div>
+            </div>
+            <div className="metric-grid">
+              {[
+                { lbl: 'Estimated width', val: selectedMetrics?.width?.toFixed(1) || 'N/A', unit: 'mm' },
+                { lbl: 'Estimated height', val: selectedMetrics?.height?.toFixed(1) || 'N/A', unit: 'mm' },
+                { lbl: 'Estimated area', val: selectedMetrics?.area?.toFixed(1) || 'N/A', unit: 'cm²' },
+                { lbl: 'Fold line length', val: selectedMetrics?.fold_line_length?.toFixed(1) || 'N/A', unit: 'mm' },
+              ].map((item, idx) => (
+                <div key={idx} className="mc" style={{ borderLeftColor: 'var(--g500)' }}>
+                  <div className="mc-lbl">{item.lbl}</div>
+                  <div className="mc-val" style={{ color: 'var(--s900)' }}>{item.val}</div>
+                  <div className="mc-unit">{item.unit}</div>
+                </div>
+              ))}
+            </div>
+            <div className="pbi-card">
+              <div className="pbi-hd">
+                <div className="pbi-ttl">
+                  <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  Export / Dieline Insights
+                </div>
+                <span className="pbi-badge">MEASUREMENTS</span>
+              </div>
+              <div className="pbi-body" style={{ display: 'grid', gap: '12px' }}>
+                <div className="pbi-stat"><div className="pbi-sv">{measurementsLoading ? 'Loading…' : selectedMetrics ? 'Ready' : 'Pending'}</div><div className="pbi-sl">Measurement state</div></div>
+                <div className="pbi-stat"><div className="pbi-sv">{selectedHistoryItem?.svg_url ? 'SVG available' : 'SVG missing'}</div><div className="pbi-sl">Dieline output</div></div>
+                <div className="pbi-stat"><div className="pbi-sv">{selectedHistoryItem?.glb_url ? '3D preview exists' : 'No 3D preview'}</div><div className="pbi-sl">3D export</div></div>
+              </div>
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -1024,7 +1569,15 @@ export default function App() {
   const [view, setView] = useState('landing'); // 'landing' | 'login' | 'dashboard'
   const [user, setUser] = useState(null);
 
-  const handleLogin = (u) => { setUser(u); setView('dashboard'); };
+  const handleLogin = (u) => {
+    const safeUser = {
+      id: u?.id ?? u?.user_id ?? 0,
+      email: u?.email ?? 'guest@morphopack.ai',
+      name: u?.name || u?.email?.split('@')[0] || 'Guest',
+    };
+    setUser(safeUser);
+    setView('dashboard');
+  };
   const handleLogout = () => { setUser(null); setView('landing'); };
 
   return (
